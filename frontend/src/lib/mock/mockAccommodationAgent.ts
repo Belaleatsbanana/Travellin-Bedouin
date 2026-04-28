@@ -1,0 +1,98 @@
+import type { AccommodationAgentResult } from "@/types/accommodation";
+import type { AgentThought } from "@/types/agents";
+
+export const mockAccommodationResult: AccommodationAgentResult = {
+  budgetAllocated: 1750,
+  currency: "USD",
+  recommendation:
+    "Based on your budget and hotel preference, mid-range hotels in Shinjuku or Asakusa offer the best value with excellent metro access to all major attractions.",
+  options: [
+    {
+      id: "acc-001",
+      name: "Shinjuku Granbell Hotel",
+      type: "hotel",
+      starRating: 4,
+      pricePerNight: 185,
+      totalPrice: 1295,
+      currency: "USD",
+      location: {
+        address: "2-14-5 Kabukicho, Shinjuku, Tokyo",
+        distanceFromCenter: 0.4,
+        coordinates: { lat: 35.6938, lng: 139.7034 },
+      },
+      amenities: ["Free WiFi", "Rooftop Bar", "City View", "Concierge", "Luggage Storage", "Restaurant"],
+      images: ["https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800"],
+      bookingUrl: "https://booking.com",
+      rating: 8.7,
+      reviewCount: 2341,
+      recommended: true,
+    },
+    {
+      id: "acc-002",
+      name: "Asakusa Traditional Inn",
+      type: "hotel",
+      starRating: 3,
+      pricePerNight: 120,
+      totalPrice: 840,
+      currency: "USD",
+      location: {
+        address: "1-5-8 Asakusa, Taito City, Tokyo",
+        distanceFromCenter: 2.1,
+        coordinates: { lat: 35.7147, lng: 139.7966 },
+      },
+      amenities: ["Free WiFi", "Japanese Breakfast", "Yukata Provided", "Onsen", "Garden"],
+      images: ["https://images.unsplash.com/photo-1551882547-ff40c63fe5fa?w=800"],
+      rating: 9.1,
+      reviewCount: 876,
+      recommended: false,
+    },
+    {
+      id: "acc-003",
+      name: "Shibuya Stream Excel Hotel Tokyu",
+      type: "hotel",
+      starRating: 4,
+      pricePerNight: 220,
+      totalPrice: 1540,
+      currency: "USD",
+      location: {
+        address: "2-1 Dogenzaka, Shibuya, Tokyo",
+        distanceFromCenter: 0.8,
+        coordinates: { lat: 35.658, lng: 139.7016 },
+      },
+      amenities: ["Free WiFi", "Restaurant", "Bar", "Gym", "River View", "Direct Shibuya Access"],
+      images: ["https://images.unsplash.com/photo-1578683010236-d716f9a3f461?w=800"],
+      rating: 8.9,
+      reviewCount: 1502,
+      recommended: false,
+    },
+    {
+      id: "acc-004",
+      name: "Akihabara Modern Apartment",
+      type: "apartment",
+      starRating: 3,
+      pricePerNight: 145,
+      totalPrice: 1015,
+      currency: "USD",
+      location: {
+        address: "3-8-1 Uchi-Kanda, Chiyoda, Tokyo",
+        distanceFromCenter: 1.2,
+        coordinates: { lat: 35.6984, lng: 139.7731 },
+      },
+      amenities: ["Kitchenette", "Free WiFi", "Laundry", "Self Check-in", "Living Area"],
+      images: ["https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=800"],
+      rating: 8.2,
+      reviewCount: 567,
+      recommended: false,
+    },
+  ],
+};
+
+export const mockAccommodationThoughts: AgentThought[] = [
+  { timestamp: new Date().toISOString(), message: "Budget allocated: $1,750 for accommodation (7 nights)", type: "info" },
+  { timestamp: new Date().toISOString(), message: "Preference: hotel — searching Tokyo hotel inventory", type: "search" },
+  { timestamp: new Date().toISOString(), message: "Price range per night: $100–$250 (within budget)", type: "decision" },
+  { timestamp: new Date().toISOString(), message: "Found 47 hotels matching criteria. Filtering by rating > 8.0...", type: "search" },
+  { timestamp: new Date().toISOString(), message: "Shortlisting top 4 options based on location, rating, and value", type: "decision" },
+  { timestamp: new Date().toISOString(), message: "Shinjuku Granbell selected as top pick — best overall score", type: "decision" },
+  { timestamp: new Date().toISOString(), message: "Adding apartment alternative for flexibility", type: "info" },
+];

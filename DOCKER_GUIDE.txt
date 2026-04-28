@@ -1,0 +1,245 @@
+===============================================================
+  TRAVELLIN BEDOUIN — Docker Guide for Beginners
+===============================================================
+
+This guide explains how to run the project using Docker.
+You do NOT need Node.js, Python, or npm installed on your machine.
+Docker handles everything.
+
+
+───────────────────────────────────────────────────────────────
+  WHAT YOU NEED FIRST
+───────────────────────────────────────────────────────────────
+
+1. Install Docker Desktop
+   → https://www.docker.com/products/docker-desktop
+   (Works on Windows, Mac, and Linux)
+   After installing, open Docker Desktop and make sure it is running
+   (you should see the Docker whale icon in your taskbar).
+
+2. Clone this repository (if you haven't already)
+   Open a terminal and run:
+
+     git clone https://github.com/Belaleatsbanana/Travellin-Bedouin.git
+     cd Travellin-Bedouin
+
+3. Set up your environment variables
+   Copy the example env file and fill in your Groq API key:
+
+     cp .env.example .env      ← if this file doesn't exist yet, just create .env
+
+   Then open .env with any text editor and add:
+
+     GROQ_API_KEY=your_groq_api_key_here
+
+   You can get a Groq API key for free at: https://console.groq.com
+
+
+───────────────────────────────────────────────────────────────
+  OPTION A — QUICK START (Frontend only, mock data)
+  Best for: Frontend developers, designers, first-time testers
+───────────────────────────────────────────────────────────────
+
+This runs only the frontend with fake (mock) data.
+No backend or API key required. Everything is simulated in the browser.
+
+Step 1: Build the frontend image
+
+  docker compose -f docker-compose.yml -f docker-compose.dev.yml build frontend
+
+  What this does:
+  - Reads the Dockerfile inside the frontend/ folder
+  - Downloads Node.js (inside the image, not your computer)
+  - Installs all npm packages
+  - Builds the Next.js application
+  - Creates a lean Docker image (~150MB)
+  This takes 2–5 minutes the first time. Subsequent builds are much faster.
+
+Step 2: Start the container
+
+  docker compose -f docker-compose.yml -f docker-compose.dev.yml up frontend
+
+Step 3: Open your browser and go to:
+
+  http://localhost:3000
+
+To stop it, press Ctrl+C in the terminal, then run:
+
+  docker compose down
+
+
+───────────────────────────────────────────────────────────────
+  OPTION B — FULL STACK (Frontend + Backend)
+  Best for: Full integration testing, backend developers
+───────────────────────────────────────────────────────────────
+
+IMPORTANT: The backend/ folder and its Dockerfile must exist before
+           this works. The backend is opt-in via the "backend" profile.
+
+Step 1: Pull the latest images from GHCR
+
+  docker pull ghcr.io/belaleatsbanana/travellin-bedouin-frontend:latest
+  docker pull ghcr.io/belaleatsbanana/travellin-bedouin-backend:latest
+
+  (Or build locally — see "Building from scratch" below)
+
+Step 2: Start everything together using the backend profile
+
+  docker compose --profile backend up
+
+  Docker will start:
+  - The backend API on port 8000
+  - The frontend on port 3000
+  - A shared private network between them
+
+Step 3: Open your browser:
+
+  Frontend:  http://localhost:3000
+  Backend:   http://localhost:8000
+             http://localhost:8000/docs  ← interactive API docs (FastAPI)
+
+To stop: Ctrl+C, then:
+
+  docker compose down
+
+
+───────────────────────────────────────────────────────────────
+  BUILDING FROM SCRATCH (without pulling from GHCR)
+───────────────────────────────────────────────────────────────
+
+If you want to build the images yourself from source code:
+
+  # Build only the frontend
+  docker compose build frontend
+
+  # Build only the backend (requires backend/ folder to exist)
+  docker compose --profile backend build backend
+
+  # Build both at once
+  docker compose --profile backend build
+
+  # Start frontend only (default)
+  docker compose up frontend
+
+  # Start frontend + backend
+  docker compose --profile backend up
+
+
+───────────────────────────────────────────────────────────────
+  USEFUL COMMANDS (run from the Travellin-Bedouin folder)
+───────────────────────────────────────────────────────────────
+
+See all running containers:
+  docker compose ps
+
+See logs from the frontend:
+  docker compose logs frontend
+
+See logs from the backend:
+  docker compose logs backend
+
+Follow live logs (like tail -f):
+  docker compose logs -f
+
+Restart a single service without rebuilding:
+  docker compose restart frontend
+
+Rebuild and restart after code changes:
+  docker compose up --build frontend
+
+Stop all containers (keeps data):
+  docker compose stop
+
+Stop and remove containers (clean slate):
+  docker compose down
+
+Stop, remove containers AND delete all images:
+  docker compose down --rmi all
+
+
+───────────────────────────────────────────────────────────────
+  PULLING THE LATEST IMAGE FROM GHCR
+───────────────────────────────────────────────────────────────
+
+Our CI/CD pipeline automatically builds and publishes a new image
+every time code is merged to the main branch.
+
+To get the latest version without building yourself:
+
+  docker pull ghcr.io/belaleatsbanana/travellin-bedouin-frontend:latest
+
+Then restart:
+
+  docker compose up
+
+If the image is marked as private on GitHub:
+  1. Go to GitHub → Settings → Developer Settings → Personal Access Tokens
+  2. Create a token with the "read:packages" scope
+  3. Run this command (replace YOUR_GITHUB_USERNAME and YOUR_TOKEN):
+
+     echo YOUR_TOKEN | docker login ghcr.io -u YOUR_GITHUB_USERNAME --password-stdin
+
+  Then pull again:
+
+     docker pull ghcr.io/belaleatsbanana/travellin-bedouin-frontend:latest
+
+
+───────────────────────────────────────────────────────────────
+  UNDERSTANDING DOCKER — ONE-PARAGRAPH PRIMER
+───────────────────────────────────────────────────────────────
+
+A Docker IMAGE is like a ZIP file of the entire application —
+Node.js, all npm packages, and the compiled Next.js code — all bundled
+together. A CONTAINER is what you get when you unzip and run that image.
+docker build creates the image. docker compose up creates and starts
+containers from images. The Dockerfile is the recipe that tells Docker
+how to build the image. docker-compose.yml is the blueprint that says
+which services (frontend, backend) to run, on which ports, with which
+environment variables, and how they connect to each other.
+
+
+───────────────────────────────────────────────────────────────
+  TROUBLESHOOTING
+───────────────────────────────────────────────────────────────
+
+"Port 3000 is already in use"
+→ Another process is using port 3000. Stop it, or change the port in
+  docker-compose.yml from "3000:3000" to "3001:3000" and visit :3001.
+
+"Cannot connect to the Docker daemon"
+→ Docker Desktop is not running. Open it from your applications and wait
+  for the whale icon to stop animating.
+
+"Error: GROQ_API_KEY is not set"
+→ Make sure your .env file exists at the repo root and contains:
+  GROQ_API_KEY=your_key_here
+
+"Build failed during npm ci"
+→ This usually means a package version conflict. Run:
+  docker compose build --no-cache frontend
+  (ignores cached layers and starts fresh)
+
+"Changes I made to code are not showing up"
+→ You need to rebuild the image after code changes:
+  docker compose up --build frontend
+
+"Image not found on GHCR"
+→ The CI workflow may not have run yet, or the image is private.
+  Build locally with: docker compose build
+
+
+───────────────────────────────────────────────────────────────
+  FILE OVERVIEW
+───────────────────────────────────────────────────────────────
+
+Travellin-Bedouin/
+├── frontend/
+│   ├── Dockerfile          ← How to build the frontend image
+│   └── .dockerignore       ← Files excluded from the Docker build
+├── docker-compose.yml      ← Main compose file (full stack)
+├── docker-compose.dev.yml  ← Dev override (mock mode, no backend)
+├── .env                    ← Your secrets (GROQ_API_KEY) — never commit this
+├── DOCKER_GUIDE.txt        ← This file
+└── .github/
+    └── workflows/
+        └── docker-publish.yml  ← Auto-builds and pushes to GHCR on merge

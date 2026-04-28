@@ -1,0 +1,18 @@
+# Development override — mock API on, no backend needed.
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml build frontend
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up frontend
+
+services:
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_BASE_URL: http://localhost:8000
+        NEXT_PUBLIC_MOCK_API: "true"       # uses in-browser mock data — no backend required
+        NEXT_PUBLIC_USE_SSE: "false"
+        NEXT_PUBLIC_POLL_INTERVAL_MS: "2000"
+    environment:
+      NODE_ENV: development

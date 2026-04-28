@@ -1,0 +1,11 @@
+node_modules
+.next
+.env*.local
+.git
+.gitignore
+README.md
+Dockerfile
+.dockerignore
+# next.config.ts is for IDE/local TypeScript support only.
+# next.config.mjs is the file actually used at runtime (Next.js 14 doesn't support .ts configs).
+next.config.ts

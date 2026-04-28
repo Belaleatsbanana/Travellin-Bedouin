@@ -1,0 +1,50 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=Inter:wght@300;400;500;600&display=swap');
+
+@layer base {
+  :root {
+    --background: 40 60% 97%;
+    --foreground: 222 47% 11%;
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+    --primary: 36 55% 60%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 210 40% 96%;
+    --secondary-foreground: 222 47% 11%;
+    --muted: 210 40% 94%;
+    --muted-foreground: 215 16% 47%;
+    --accent: 172 66% 50%;
+    --accent-foreground: 222 47% 11%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 214 32% 91%;
+    --input: 214 32% 91%;
+    --ring: 36 55% 60%;
+    --radius: 0.75rem;
+    --font-playfair: 'Playfair Display', serif;
+    --font-inter: 'Inter', sans-serif;
+  }
+}
+
+@layer base {
+  * { @apply border-border; }
+  body {
+    @apply bg-brand-parchment text-foreground font-sans;
+    font-family: var(--font-inter), system-ui, sans-serif;
+  }
+  h1, h2, h3 {
+    font-family: var(--font-playfair), serif;
+  }
+}
+
+@layer utilities {
+  .agent-card-running {
+    animation: agent-glow 2s ease-in-out infinite;
+  }
+  .agent-card-completed {
+    animation: agent-glow-green 3s ease-in-out infinite;
+  }
+}
