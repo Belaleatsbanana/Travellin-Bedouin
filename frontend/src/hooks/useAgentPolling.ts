@@ -6,34 +6,34 @@ import { fetchSessionStatus } from "@/lib/api/trip";
 import { useAgentStore } from "@/store/agentStore";
 import type { SessionStatusResponse } from "@/types/agents";
 
+const MOCK = process.env.NEXT_PUBLIC_MOCK_API === "true";
 const POLL_MS = Number(process.env.NEXT_PUBLIC_POLL_INTERVAL_MS) || 2000;
 
 export function useAgentPolling(sessionId: string | null) {
-  const { updateAgentStatus, setOverallStatus } = useAgentStore();
+  const { updateAgentStatus, setOverallStatus, overallStatus } = useAgentStore();
 
+  // In mock mode the simulation drives agentStore directly — no polling needed.
   const query = useQuery({
     queryKey: ["session-status", sessionId],
     queryFn: () => fetchSessionStatus(sessionId!),
-    enabled: !!sessionId,
-    refetchInterval: (query) => {
-      const data = query.state.data as SessionStatusResponse | undefined;
+    enabled: !MOCK && !!sessionId,
+    refetchInterval: (q) => {
+      const data = q.state.data as SessionStatusResponse | undefined;
       if (!data) return POLL_MS;
-      return data.overallStatus === "completed" ||
-        data.overallStatus === "failed"
+      return data.overallStatus === "completed" || data.overallStatus === "failed"
         ? false
         : POLL_MS;
     },
     staleTime: 0,
   });
 
+  // Only update the store from polling results in real (non-mock) mode.
   useEffect(() => {
-    if (!query.data) return;
+    if (MOCK || !query.data) return;
     const data = query.data as SessionStatusResponse;
     setOverallStatus(
-      data.overallStatus === "completed"
-        ? "completed"
-        : data.overallStatus === "failed"
-        ? "failed"
+      data.overallStatus === "completed" ? "completed"
+        : data.overallStatus === "failed" ? "failed"
         : "running"
     );
     for (const agentState of Object.values(data.agents)) {
@@ -42,10 +42,11 @@ export function useAgentPolling(sessionId: string | null) {
   }, [query.data, updateAgentStatus, setOverallStatus]);
 
   return {
-    isComplete:
-      (query.data as SessionStatusResponse | undefined)?.overallStatus ===
-      "completed",
-    isError: query.isError,
-    isLoading: query.isLoading,
+    // In mock mode read directly from the store; in real mode use query data.
+    isComplete: MOCK
+      ? overallStatus === "completed"
+      : (query.data as SessionStatusResponse | undefined)?.overallStatus === "completed",
+    isError: !MOCK && query.isError,
+    isLoading: !MOCK && query.isLoading,
   };
 }

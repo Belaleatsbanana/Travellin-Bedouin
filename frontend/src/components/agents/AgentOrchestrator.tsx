@@ -7,63 +7,40 @@ import { useTripStore } from "@/store/tripStore";
 import { useAgentStore } from "@/store/agentStore";
 import { useAgentPolling } from "@/hooks/useAgentPolling";
 import { AgentStatusGrid } from "./AgentStatusGrid";
-import { fetchFullResults } from "@/lib/api/trip";
 import { ArrowRight, Loader2 } from "lucide-react";
 
 export function AgentOrchestrator() {
   const router = useRouter();
   const { sessionId } = useTripStore();
-  const {
-    overallStatus,
-    setOverallStatus,
-    setBudgetResult,
-    setVisaResult,
-    setAccommodationResult,
-    setTransportResult,
-    setActivitiesResult,
-    budgetAllocation,
-  } = useAgentStore();
-
+  const { overallStatus } = useAgentStore();
   const { isComplete, isError } = useAgentPolling(sessionId);
 
   useEffect(() => {
-    if (!sessionId) {
-      router.push("/plan");
-    }
+    if (!sessionId) router.push("/plan");
   }, [sessionId, router]);
-
-  useEffect(() => {
-    if (isComplete && !budgetAllocation && sessionId) {
-      fetchFullResults(sessionId).then((data) => {
-        setBudgetResult(data.budget);
-        setVisaResult(data.visa);
-        setAccommodationResult(data.accommodation);
-        setTransportResult(data.transport);
-        setActivitiesResult(data.activities);
-      });
-    }
-  }, [isComplete, sessionId, budgetAllocation, setBudgetResult, setVisaResult, setAccommodationResult, setTransportResult, setActivitiesResult]);
 
   return (
     <div className="space-y-8">
       <div className="text-center">
-        {overallStatus === "running" ? (
-          <>
-            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-blue-50 border border-blue-200 text-blue-700 text-sm font-medium mb-4">
-              <Loader2 className="w-4 h-4 animate-spin" />
-              Agents are working in parallel...
-            </div>
-            <p className="text-brand-night/50 text-sm">This usually takes 30–60 seconds</p>
-          </>
-        ) : overallStatus === "completed" ? (
+        {overallStatus === "running" && (
+          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-blue-50 border border-blue-200 text-blue-700 text-sm font-medium mb-4">
+            <Loader2 className="w-4 h-4 animate-spin" />
+            Agents are working in parallel...
+          </div>
+        )}
+        {overallStatus === "completed" && (
           <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-sm font-medium mb-4">
             ✓ All agents completed successfully!
           </div>
-        ) : overallStatus === "failed" ? (
+        )}
+        {overallStatus === "failed" && (
           <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-red-50 border border-red-200 text-red-700 text-sm font-medium mb-4">
             One or more agents encountered an error.
           </div>
-        ) : null}
+        )}
+        {overallStatus === "running" && (
+          <p className="text-brand-night/50 text-sm">This usually takes 30–60 seconds</p>
+        )}
       </div>
 
       <AgentStatusGrid />

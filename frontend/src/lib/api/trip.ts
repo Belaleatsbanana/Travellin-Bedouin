@@ -1,14 +1,6 @@
 import { apiClient } from "./client";
 import type { TripFormData, CreateSessionResponse } from "@/types/trip";
-import {
-  createSession,
-  getSessionStatus,
-} from "@/lib/mock/mockSessionSimulator";
-import { mockBudgetAllocation } from "@/lib/mock/mockBudgetAgent";
-import { mockVisaResult } from "@/lib/mock/mockVisaAgent";
-import { mockAccommodationResult } from "@/lib/mock/mockAccommodationAgent";
-import { mockTransportResult } from "@/lib/mock/mockTransportAgent";
-import { mockActivitiesResult } from "@/lib/mock/mockActivitiesAgent";
+import { startMockSimulation } from "@/lib/mock/mockSimulation";
 
 const MOCK = process.env.NEXT_PUBLIC_MOCK_API === "true";
 
@@ -16,20 +8,20 @@ export async function postCreateSession(
   formData: TripFormData
 ): Promise<CreateSessionResponse> {
   if (MOCK) {
-    const sessionId = `mock-session-${Date.now()}`;
-    createSession(sessionId);
+    const sessionId = `mock-${Date.now()}`;
+    // Drive agentStore directly via setInterval — no Map, no polling needed
+    startMockSimulation();
     return { sessionId, status: "initializing", estimatedDurationSeconds: 35 };
   }
-  const res = await apiClient.post<CreateSessionResponse>("/api/sessions", {
-    formData,
-  });
+  const res = await apiClient.post<CreateSessionResponse>("/api/sessions", { formData });
   return res.data;
 }
 
 export async function fetchSessionStatus(sessionId: string) {
   if (MOCK) {
-    await new Promise((r) => setTimeout(r, 300));
-    return getSessionStatus(sessionId);
+    // In mock mode the store is updated directly by startMockSimulation.
+    // Return a placeholder so the polling hook doesn't error.
+    return null;
   }
   const res = await apiClient.get(`/api/sessions/${sessionId}/status`);
   return res.data;
@@ -37,15 +29,9 @@ export async function fetchSessionStatus(sessionId: string) {
 
 export async function fetchFullResults(sessionId: string) {
   if (MOCK) {
-    await new Promise((r) => setTimeout(r, 600));
-    return {
-      sessionId,
-      budget: mockBudgetAllocation,
-      visa: mockVisaResult,
-      accommodation: mockAccommodationResult,
-      transport: mockTransportResult,
-      activities: mockActivitiesResult,
-    };
+    // Results were already pushed into agentStore by startMockSimulation.
+    // Return null — AgentOrchestrator checks agentStore directly.
+    return null;
   }
   const res = await apiClient.get(`/api/sessions/${sessionId}/results/full`);
   return res.data;
