@@ -35,10 +35,11 @@ from pathlib import Path
 from typing import Any
 
 import httpx
-from groq import AsyncGroq
+import groq as groq_sdk
 
 from models.results import ActivitiesResult
 from models.session import TripFormData
+from agents.groq_client import groq_chat
 from storage.session_store import emit_thought, store_result, update_progress
 
 # ─── Configuration ────────────────────────────────────────────────────────────
@@ -53,7 +54,23 @@ AGENT_ID = "activities"
 INSTRUCTIONS_PATH = (
     Path(__file__).parent.parent / "instructions" / "activities_instructions.txt"
 )
-MAX_TOKENS_FINAL = 2500
+MAX_TOKENS_FINAL = 16000
+
+# Real Unsplash photo IDs per activity category — used as fallbacks when LLM invents fake URLs
+_CATEGORY_IMAGES: dict[str, list[str]] = {
+    "culture":    ["photo-1531366936337-7c912a4589a7", "photo-1509927083803-4bd519298ac4", "photo-1528360983277-13d401cdc186"],
+    "food":       ["photo-1567620905732-2d1ec7ab7445", "photo-1414235077428-338989a2e8c0", "photo-1504674900247-0877df9cc836"],
+    "nature":     ["photo-1490806843957-31f4c9a91c65", "photo-1441974231531-c6227db76b6e", "photo-1506905925346-21bda4d32df4"],
+    "adventure":  ["photo-1551632436-cbf8dd35adfa", "photo-1500534314209-a25ddb2bd429", "photo-1464822759023-fed622ff2c3b"],
+    "nightlife":  ["photo-1516450360452-9312f5e86fc7", "photo-1541532713592-a2bf578c9f28", "photo-1470229722913-7c0e2dbbafd3"],
+    "shopping":   ["photo-1483985988355-763728e1935b", "photo-1555529669-e69e7aa0ba9a", "photo-1523381210434-271e8be1f52b"],
+    "wellness":   ["photo-1544161515-4ab6ce6db874", "photo-1519823551278-64ac92734fb1", "photo-1540555700478-4be289fbecef"],
+    "sports":     ["photo-1461896836934-ffe607ba8211", "photo-1547347298-4074fc3086f0", "photo-1540497077202-7c8a3999166f"],
+    "art":        ["photo-1561214115-f2f134cc4912", "photo-1580136579312-94651dfd596d", "photo-1549887534-1541e9326642"],
+    "history":    ["photo-1509023464722-18d996393ca8", "photo-1548013146-72479768bada", "photo-1560969184-10fe8719e047"],
+    "beach":      ["photo-1507525428034-b723cf961d3e", "photo-1519046904884-53103b34b206", "photo-1507525428034-b723cf961d3e"],
+    "default":    ["photo-1477959858617-67f85cf4f1df", "photo-1540959733332-eab4deabeeaf", "photo-1542051841857-5f90071e7989"],
+}
 
 
 # ─── Load instructions ────────────────────────────────────────────────────────
@@ -144,7 +161,6 @@ async def tool_search_amadeus_activities(lat: float | None, lon: float | None, r
                         "currency": price_info.get("currencyCode", "USD"),
                         "rating": float(item.get("rating", 0)),
                         "bookingUrl": item.get("bookingLink", ""),
-                        "images": [p.get("url", "") for p in pictures[:1] if p.get("url")],
                     })
                 return {"activities": activities, "count": len(activities), "source": "amadeus"}
             return {"activities": [], "count": 0, "source": "amadeus", "error": f"HTTP {resp.status_code}"}
@@ -256,18 +272,18 @@ def _patch_result(raw: dict, form_data: TripFormData, budget: float) -> dict:
     raw.setdefault("currency", form_data.currency)
     raw.setdefault("recommendation", f"Explore the best of {form_data.destinationCity}.")
     raw.setdefault("activities", [])
-    raw.setdefault("suggestedItinerary", [])
+    raw.setdefault("schedule", [])
 
-    if not raw["suggestedItinerary"]:
+    if not raw["schedule"]:
         try:
             departure = datetime.strptime(form_data.departureDate, "%Y-%m-%d")
         except Exception:
             departure = datetime.utcnow()
-        raw["suggestedItinerary"] = [
+        raw["schedule"] = [
             {
                 "day": d,
                 "date": (departure + timedelta(days=d - 1)).strftime("%Y-%m-%d"),
-                "activities": [],
+                "slots": [],
                 "freeTime": "Free day — explore the city at your own pace",
             }
             for d in range(1, form_data.durationNights + 1)
@@ -286,9 +302,6 @@ def _patch_result(raw: dict, form_data: TripFormData, budget: float) -> dict:
         act.setdefault("rating", 8.0)
         act.setdefault("reviewCount", 0)
         act.setdefault("included", [])
-        act.setdefault("images", [
-            "https://images.unsplash.com/photo-1477959858617-67f85cf4f1df?w=800&auto=format&fit=crop"
-        ])
         act.setdefault("recommended", i <= 2)
         act.setdefault("bookingUrl", "")
         act.setdefault("meetingPoint", "")
@@ -302,26 +315,34 @@ async def run_activities_agent(
     session_id: str,
     form_data: TripFormData,
     budget_allocated: float,
+    accommodation_context: dict | None = None,
+    chat_history: list[dict] | None = None,
 ) -> dict:
     """
     Execute the Activities Agent.
     Always stores a result (even a fallback) so the frontend never gets null.
     """
     try:
-        return await _run(session_id, form_data, budget_allocated)
+        return await _run(session_id, form_data, budget_allocated, accommodation_context, chat_history or [])
     except Exception as exc:
         print(f"\n[Activities Agent FATAL ERROR]\n{traceback.format_exc()}", flush=True)
         await emit_thought(session_id, AGENT_ID, f"Agent error: {exc}", "warning")
         fallback = _patch_result({}, form_data, budget_allocated)
         try:
-            await store_result(session_id, "activities", fallback)
+            await store_result(session_id, AGENT_ID, fallback)
         except Exception:
             pass
         await update_progress(session_id, AGENT_ID, 100, "failed")
         return fallback
 
 
-async def _run(session_id: str, form_data: TripFormData, budget_allocated: float) -> dict:
+async def _run(
+    session_id: str,
+    form_data: TripFormData,
+    budget_allocated: float,
+    accommodation_context: dict | None = None,
+    chat_history: list[dict] | None = None,
+) -> dict:
     num_travelers = (
         form_data.travelers.adults
         + form_data.travelers.children
@@ -386,7 +407,35 @@ async def _run(session_id: str, form_data: TripFormData, budget_allocated: float
     spendable = round(budget_allocated * 0.80, 2)
     categories_str = ", ".join(form_data.activityCategories)
 
-    # Compact system prompt — plain string concat avoids f-string brace escaping issues
+    # Build accommodation context section
+    acc_section = ""
+    if accommodation_context:
+        confirmed_opt = accommodation_context.get("confirmed_option") or (
+            next(iter(accommodation_context.get("options", [])), None)
+        )
+        if confirmed_opt:
+            loc = confirmed_opt.get("location", {})
+            coords = loc.get("coordinates", {})
+            acc_section = (
+                f"\nACCOMMODATION BASE (use as daily start/end point):\n"
+                f"Hotel: {confirmed_opt.get('name', 'Hotel')}\n"
+                f"Address: {loc.get('address', '')}\n"
+                f"Coordinates: lat={coords.get('lat', '')}, lng={coords.get('lng', '')}\n"
+                f"Use this location as the reference point for activity proximity.\n"
+            )
+
+    # Build chat history refinement section
+    chat_section = ""
+    if chat_history:
+        conv = "\n".join(
+            f"{'User' if m['role'] == 'user' else 'Assistant'}: {m['content']}"
+            for m in chat_history
+        )
+        chat_section = (
+            f"\nCONVERSATION HISTORY — apply these user preferences strictly:\n{conv}\n"
+            "Adjust the activity selection and schedule to honour all user requests above.\n"
+        )
+
     system_instructions = (
         "You are a travel activities curator. Return ONLY a valid JSON object — no markdown, no explanation.\n\n"
         "Required JSON fields:\n"
@@ -394,26 +443,34 @@ async def _run(session_id: str, form_data: TripFormData, budget_allocated: float
         "- currency: string\n"
         "- recommendation: string (2-3 sentences about activities in the destination)\n"
         "- activities: array of activity objects\n"
-        "- suggestedItinerary: array of day objects\n\n"
-        "Each activity object needs: id (act-001...), name, category, description, "
+        "- schedule: array of day objects (replaces suggestedItinerary)\n\n"
+        "Each activity object: id (act-001...), name, category, description, "
         "duration (half_day/full_day/evening/multi_day), price (number), priceType (per_person/per_group), "
-        "currency, location, rating (float), reviewCount (int), included (array), "
-        "meetingPoint (str), bookingUrl (str), images (array of Unsplash URLs), "
+        "currency, location (string address), coordinates ({lat, lng}), rating (float), reviewCount (int), "
+        "included (array), meetingPoint (str), bookingUrl (str), "
         "recommended (bool), dayRecommended (int).\n\n"
-        "Each itinerary day needs: day (int), date (YYYY-MM-DD), activities (array of act ids), freeTime (str).\n\n"
+        "Each schedule day: day (int), date (YYYY-MM-DD), freeTime (str), "
+        "slots (array of timed slots).\n"
+        "Each slot: startTime (HH:MM), endTime (HH:MM), type='activity', "
+        "activityId (matching id in activities), activityName (str), "
+        "locationName (str), coordinates ({lat, lng}).\n\n"
         "RULES:\n"
-        "- 6 to 10 activities total. At least 2 FREE (price=0).\n"
-        "- Paid total (price x travelers) must not exceed spendable budget.\n"
-        "- Itinerary must cover all trip days exactly.\n"
-        "- Every activity id in itinerary must exist in activities array.\n"
-        "- full_day = one activity per day. half_day = can pair two.\n"
-        "- Leave at least 1 free day (no activities array entries).\n"
-        "- freeTime: name real free attractions for that day.\n"
-        "- images: use https://images.unsplash.com/photo-<ID>?w=800 with a relevant photo ID.\n"
-        "- recommended=true for top 2-3 picks."
+        "- Provide 40 to 50 activities in the activities array (a rich catalogue for the user to choose from).\n"
+        "- At least 8 FREE (price=0) activities — parks, viewpoints, markets, temples, beaches, etc.\n"
+        "- Vary categories broadly: culture, food, nature, adventure, shopping, nightlife, wellness, sports, art, history.\n"
+        "- Do NOT include an images field — frontend will display cards without photos.\n"
+        "- Paid total of ALL activities must not exceed spendable budget (user will only select a subset).\n"
+        "- Schedule must cover ALL trip days exactly — every day object is REQUIRED.\n"
+        "- Most days MUST have 2-3 slots (activityId must match an id in activities array).\n"
+        "- Only 1 day may have empty slots (freeTime only) — leave the rest day last.\n"
+        "- Every activityId in a slot MUST exist in the activities array.\n"
+        "- Each slot needs startTime, endTime, activityId, activityName, locationName.\n"
+        "- Allow 15-30 min travel gaps between consecutive slots.\n"
+        "- First slot no earlier than 08:00. Last slot ends by 22:00.\n"
+        "- full_day activities take ~6h. half_day ~3h. evening ~2h.\n"
+        "- recommended=true for top 5 picks."
     )
 
-    # Compact user prompt with just the key facts
     web_lines = []
     for cat, data in web_results.items():
         titles = [r.get("title", "") for r in data.get("results", [])[:4] if r.get("title")]
@@ -428,18 +485,20 @@ async def _run(session_id: str, form_data: TripFormData, budget_allocated: float
         f"Dates: {form_data.departureDate} to {form_data.returnDate} ({form_data.durationNights} nights)\n"
         f"Travelers: {num_travelers}\n"
         f"Budget: {budget_allocated} {form_data.currency} total, {spendable} {form_data.currency} spendable\n"
-        f"Categories: {categories_str}\n\n"
+        f"Categories: {categories_str}\n"
+        f"{acc_section}"
         f"Amadeus API: {amadeus_count} activities found.\n"
         f"Web search results:\n{web_summary}\n"
-        f"Free activities hint: {free_data.get('instruction', '')}\n\n"
-        f"Produce the complete JSON activities plan. "
-        f"Use your knowledge of {form_data.destinationCity} to fill in realistic activities."
+        f"Free activities hint: {free_data.get('instruction', '')}\n"
+        f"{chat_section}"
+        f"Produce the complete JSON activities plan. Include 40-50 activities total (rich catalogue) "
+        f"with a recommended daily schedule of 2-3 activities per day. "
+        f"Use your knowledge of {form_data.destinationCity} to fill in realistic, varied activities."
     )
 
-    groq_client = AsyncGroq(api_key=os.getenv("ACTIVITY_API_KEY") or os.getenv("GROQ_API_KEY", ""))
-
     try:
-        response = await groq_client.chat.completions.create(
+        response = await groq_chat(
+            primary_key_env="ACTIVITY_API_KEY",
             model=GROQ_MODEL,
             messages=[
                 {"role": "system", "content": system_instructions},
@@ -451,6 +510,10 @@ async def _run(session_id: str, form_data: TripFormData, budget_allocated: float
         )
         final_text = response.choices[0].message.content or ""
         print(f"[Activities Agent] LLM responded ({len(final_text)} chars)", flush=True)
+    except groq_sdk.RateLimitError as exc:
+        print(f"[Activities Agent] RATE LIMIT: {exc}", flush=True)
+        await emit_thought(session_id, AGENT_ID, f"Groq rate limit hit — try again in a moment. ({exc})", "warning")
+        raise
     except Exception as exc:
         print(f"[Activities Agent] LLM call failed: {exc}", flush=True)
         raise
@@ -466,6 +529,20 @@ async def _run(session_id: str, form_data: TripFormData, budget_allocated: float
         await emit_thought(session_id, AGENT_ID, f"JSON parse error — applying defaults: {exc}", "warning")
 
     await update_progress(session_id, AGENT_ID, 90)
+
+    # Migrate old suggestedItinerary field to schedule if LLM used old name
+    if "suggestedItinerary" in result_dict and "schedule" not in result_dict:
+        old = result_dict.pop("suggestedItinerary")
+        # Convert old format (activities: list[str]) to new schedule slots
+        result_dict["schedule"] = [
+            {
+                "day": d.get("day", i + 1),
+                "date": d.get("date", ""),
+                "slots": [],
+                "freeTime": d.get("freeTime", ""),
+            }
+            for i, d in enumerate(old)
+        ]
 
     try:
         validated = ActivitiesResult(**result_dict)
@@ -496,7 +573,7 @@ async def _run(session_id: str, form_data: TripFormData, budget_allocated: float
     )
 
     result_payload = validated.model_dump()
-    await store_result(session_id, "activities", result_payload)
+    await store_result(session_id, AGENT_ID, result_payload)
     await update_progress(session_id, AGENT_ID, 100, "completed")
     print(f"[Activities Agent] Done ✓  activities={len(validated.activities)}", flush=True)
     return result_payload

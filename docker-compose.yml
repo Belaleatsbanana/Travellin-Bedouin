@@ -13,6 +13,11 @@ services:
         NEXT_PUBLIC_POLL_INTERVAL_MS: "2000"
     image: ghcr.io/belaleatsbanana/travellin-bedouin-frontend:local
     container_name: travellin-frontend
+    init: true
+    stop_grace_period: 5s
+    stop_signal: SIGTERM
+    security_opt:
+      - apparmor:unconfined
     ports:
       - "3000:3000"
     environment:
@@ -31,6 +36,11 @@ services:
       dockerfile: Dockerfile
     image: ghcr.io/belaleatsbanana/travellin-bedouin-backend:local
     container_name: travellin-backend
+    init: true
+    stop_grace_period: 5s
+    stop_signal: SIGTERM
+    security_opt:
+      - apparmor:unconfined
     ports:
       - "8000:8000"
     env_file: .env

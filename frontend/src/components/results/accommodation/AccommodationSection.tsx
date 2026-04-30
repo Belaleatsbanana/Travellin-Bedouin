@@ -32,52 +32,56 @@ function AccommodationCard({ option, isSelected, onSelect }: {
       )}
       onClick={() => onSelect(option.id)}
     >
-      <div className="h-36 bg-gradient-to-br from-brand-sand/20 to-brand-dune/20 relative overflow-hidden">
-        {option.images[0] && (
-          <img src={option.images[0]} alt={option.name} className="w-full h-full object-cover" />
-        )}
-        <div className="absolute top-3 left-3 flex gap-2">
-          <span className={cn("px-2 py-0.5 rounded-full text-xs font-semibold capitalize", TYPE_BADGE[option.type] || "bg-gray-100 text-gray-700")}>
-            {option.type}
-          </span>
-          {option.recommended && (
-            <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-brand-sand text-brand-night flex items-center gap-1">
-              <Star className="w-3 h-3 fill-current" /> Top Pick
+      <div className="p-4">
+        <div className="flex items-start justify-between mb-2">
+          <div className="flex gap-2 flex-wrap">
+            <span className={cn("px-2 py-0.5 rounded-full text-xs font-semibold capitalize", TYPE_BADGE[option.type] || "bg-gray-100 text-gray-700")}>
+              {option.type}
             </span>
+            {option.recommended && (
+              <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-brand-sand text-brand-night flex items-center gap-1">
+                <Star className="w-3 h-3 fill-current" /> Top Pick
+              </span>
+            )}
+          </div>
+          {isSelected && (
+            <div className="w-7 h-7 rounded-full bg-brand-sand flex items-center justify-center">
+              <Check className="w-4 h-4 text-brand-night" />
+            </div>
           )}
         </div>
-        {isSelected && (
-          <div className="absolute top-3 right-3 w-7 h-7 rounded-full bg-brand-sand flex items-center justify-center">
-            <Check className="w-4 h-4 text-brand-night" />
-          </div>
-        )}
-      </div>
-      <div className="p-4">
-        <div className="flex items-start justify-between mb-1">
-          <h4 className="font-semibold text-brand-night text-sm leading-tight">{option.name}</h4>
-          <div className="text-right shrink-0 ml-2">
-            <p className="font-bold text-brand-dune">{formatCurrency(option.pricePerNight, option.currency)}</p>
-            <p className="text-xs text-brand-night/40">/night</p>
-          </div>
+        <div className="flex items-start justify-between mb-2">
+          <h4 className="font-semibold text-brand-night text-base leading-tight">{option.name}</h4>
         </div>
-        <StarRating rating={option.starRating} />
-        <div className="flex items-center gap-1 text-xs text-brand-night/50 mt-1.5 mb-3">
+        <div className="flex items-center gap-2 text-xs text-brand-night/60 mb-3">
           <MapPin className="w-3 h-3" />
           <span>{option.location.distanceFromCenter} km from center</span>
-          <span className="ml-auto font-semibold text-brand-night">{option.rating}/10</span>
-          <span className="text-brand-night/30">({option.reviewCount.toLocaleString()})</span>
+          <span className="ml-2 flex items-center gap-1">
+            <Star className="w-3 h-3 fill-current text-amber-400" />
+            <span className="font-semibold text-brand-night">{option.rating}/10</span>
+          </span>
+          <span className="text-brand-night/40">({(option.reviewCount ?? 0).toLocaleString()} reviews)</span>
+        </div>
+        <div className="text-xs text-brand-night/70 mb-3 line-clamp-2">
+          {option.location.address}
         </div>
         <div className="flex flex-wrap gap-1 mb-3">
-          {option.amenities.slice(0, 4).map((a) => (
+          {option.amenities?.slice(0, 5).map((a) => (
             <span key={a} className="text-[10px] px-2 py-0.5 rounded-full bg-gray-100 text-brand-night/60">{a}</span>
           ))}
-          {option.amenities.length > 4 && (
-            <span className="text-[10px] px-2 py-0.5 rounded-full bg-gray-100 text-brand-night/40">+{option.amenities.length - 4} more</span>
+          {(option.amenities?.length ?? 0) > 5 && (
+            <span className="text-[10px] px-2 py-0.5 rounded-full bg-gray-100 text-brand-night/40">+{option.amenities.length - 5} more</span>
           )}
         </div>
-        <div className="flex items-center justify-between border-t border-gray-100 pt-3">
-          <span className="text-xs text-brand-night/50">Total ({Math.round(option.totalPrice / option.pricePerNight)} nights)</span>
-          <span className="font-bold text-brand-night">{formatCurrency(option.totalPrice, option.currency)}</span>
+        <div className="flex items-center justify-between border-t border-gray-100 pt-3 mt-2">
+          <div>
+            <p className="font-bold text-brand-dune text-lg">{formatCurrency(option.pricePerNight, option.currency)}</p>
+            <p className="text-xs text-brand-night/40">/night</p>
+          </div>
+          <div className="text-right">
+            <p className="font-bold text-brand-night">{formatCurrency(option.totalPrice, option.currency)}</p>
+            <p className="text-xs text-brand-night/40">total ({Math.round(option.totalPrice / option.pricePerNight)} nights)</p>
+          </div>
         </div>
       </div>
     </div>

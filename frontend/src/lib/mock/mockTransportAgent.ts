@@ -96,6 +96,21 @@ export const mockTransportResult: TransportAgentResult = {
       },
     ],
   },
+  dailyLegs: [
+    {
+      day: 1, date: "2026-06-01",
+      legs: [
+        { fromTime: "09:45", toTime: "10:00", fromLocationName: "Hotel", toLocationName: "TeamLab Borderless", mode: "metro", durationMinutes: 15, estimatedCost: 2, currency: "USD", notes: "Yurikamome Line to Odaiba" },
+        { fromTime: "14:00", toTime: "14:20", fromLocationName: "TeamLab Borderless", toLocationName: "Hotel", mode: "metro", durationMinutes: 20, estimatedCost: 2, currency: "USD", notes: "" },
+      ],
+    },
+    {
+      day: 2, date: "2026-06-02",
+      legs: [
+        { fromTime: "10:30", toTime: "10:45", fromLocationName: "Hotel", toLocationName: "Shinjuku", mode: "metro", durationMinutes: 15, estimatedCost: 1.5, currency: "USD", notes: "" },
+      ],
+    },
+  ],
 };
 
 export const mockTransportThoughts: AgentThought[] = [

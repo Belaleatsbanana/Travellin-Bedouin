@@ -56,7 +56,7 @@ function TransportCard({ option, isSelected, onSelect }: {
         </span>
       </div>
       <div className="flex flex-wrap gap-1">
-        {option.features.slice(0, 3).map((f) => (
+        {option.features?.slice(0, 3).map((f) => (
           <span key={f} className="text-[10px] px-2 py-0.5 rounded-full bg-gray-100 text-brand-night/60">{f}</span>
         ))}
       </div>

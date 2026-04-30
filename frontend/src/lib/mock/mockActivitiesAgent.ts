@@ -111,14 +111,14 @@ export const mockActivitiesResult: ActivitiesAgentResult = {
       dayRecommended: 3,
     },
   ],
-  suggestedItinerary: [
-    { day: 1, date: "2026-06-01", activities: ["act-002"], freeTime: "Evening: Shibuya Crossing at night (free)" },
-    { day: 2, date: "2026-06-02", activities: ["act-001"], freeTime: "Afternoon: Odaiba waterfront & Rainbow Bridge (free)" },
-    { day: 3, date: "2026-06-03", activities: ["act-004", "act-006"], freeTime: "Afternoon: Senso-ji Temple, Nakamise shopping (free)" },
-    { day: 4, date: "2026-06-04", activities: ["act-003"], freeTime: "Full day trip — early start, return by evening" },
-    { day: 5, date: "2026-06-05", activities: ["act-005"], freeTime: "Evening: Shinjuku Golden Gai (free)" },
-    { day: 6, date: "2026-06-06", activities: [], freeTime: "Free day — Harajuku, Omotesando, Meiji Shrine (all free)" },
-    { day: 7, date: "2026-06-07", activities: [], freeTime: "Check-out day — Tsukiji breakfast, departure prep" },
+  schedule: [
+    { day: 1, date: "2026-06-01", slots: [{ startTime: "10:00", endTime: "14:00", type: "activity", activityId: "act-002", activityName: "TeamLab Borderless", locationName: "Odaiba, Tokyo" }], freeTime: "Evening: Shibuya Crossing at night (free)" },
+    { day: 2, date: "2026-06-02", slots: [{ startTime: "11:00", endTime: "15:00", type: "activity", activityId: "act-001", activityName: "Tokyo Food Tour", locationName: "Shinjuku, Tokyo" }], freeTime: "Afternoon: Odaiba waterfront & Rainbow Bridge (free)" },
+    { day: 3, date: "2026-06-03", slots: [{ startTime: "09:00", endTime: "12:00", type: "activity", activityId: "act-004", activityName: "Tsukiji Market Tour", locationName: "Tsukiji, Tokyo" }, { startTime: "14:00", endTime: "17:00", type: "activity", activityId: "act-006", activityName: "Tokyo Skytree", locationName: "Asakusa, Tokyo" }], freeTime: "Afternoon: Senso-ji Temple, Nakamise shopping (free)" },
+    { day: 4, date: "2026-06-04", slots: [{ startTime: "07:00", endTime: "19:00", type: "activity", activityId: "act-003", activityName: "Mt. Fuji Day Trip", locationName: "Fuji Five Lakes" }], freeTime: "Full day trip — early start, return by evening" },
+    { day: 5, date: "2026-06-05", slots: [{ startTime: "18:00", endTime: "21:00", type: "activity", activityId: "act-005", activityName: "Tokyo Night Photography Walk", locationName: "Shinjuku, Tokyo" }], freeTime: "Evening: Shinjuku Golden Gai (free)" },
+    { day: 6, date: "2026-06-06", slots: [], freeTime: "Free day — Harajuku, Omotesando, Meiji Shrine (all free)" },
+    { day: 7, date: "2026-06-07", slots: [], freeTime: "Check-out day — Tsukiji breakfast, departure prep" },
   ],
 };
 

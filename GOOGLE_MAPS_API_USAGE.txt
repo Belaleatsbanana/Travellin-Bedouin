@@ -1,0 +1,72 @@
+Google Maps / Places API Usage Tracking
+========================================
+Last updated: 2026-05-01
+Env var: GOOGLE_MAPS_API_KEY (set in .env, injected into backend container via env_file)
+
+All calls are in the backend only. No Google Maps calls from the frontend.
+
+────────────────────────────────────────────────────────────────────────────────
+FILE: backend/agents/accommodation_agent.py
+────────────────────────────────────────────────────────────────────────────────
+
+1. Places Nearby Search — line 92
+   API:    Places API (Nearby Search)
+   Method: gmaps.places_nearby(location, radius, type, keyword, rank_by)
+   When:   Destination coordinates are available (geocoded via Nominatim)
+   Params: location=(lat, lng), radius=5000m, type="lodging",
+           keyword=<accommodationPreference>, rank_by="prominence"
+   Billing: $0.032 per request (up to 20 results)
+
+2. Places Text Search — line 100
+   API:    Places API (Text Search)
+   Method: gmaps.places(query, type)
+   When:   Fallback if geocoding fails (no coordinates)
+   Params: query="<accommodationType> in <city>, <country>", type="lodging"
+   Billing: $0.032 per request (up to 20 results)
+
+3. Place Details — line 113  [called in a loop, up to 15 times per session]
+   API:    Places API (Place Details)
+   Method: gmaps.place(place_id=<id>)
+   When:   Once per hotel returned by Nearby/Text Search (up to 15 hotels)
+   Params: place_id=<Google Place ID>
+   Returns: Full details — address, rating, reviews, photos, phone, website, hours
+   Billing: $0.017 per request → up to $0.255 per session for 15 hotels
+   NOTE:   This is the most expensive call. Consider caching by place_id.
+
+4. Place Photo — line 159  [URL construction only, called by browser at render time]
+   API:    Places API (Place Photo)
+   Endpoint: https://maps.googleapis.com/maps/api/place/photo
+   When:   URL is built server-side for each photo_reference (up to 3 per hotel).
+           The actual HTTP request is made by the browser when the image renders.
+   Params: maxwidth=400, photo_reference=<ref>, key=<GOOGLE_MAPS_API_KEY>
+   Billing: $0.007 per photo request (browser-triggered)
+   NOTE:   The API key is exposed in the image URL sent to the frontend.
+           Consider proxying through backend to hide the key.
+
+────────────────────────────────────────────────────────────────────────────────
+FILE: backend/agents/activities_agent.py
+────────────────────────────────────────────────────────────────────────────────
+
+   No Google Maps API calls. Uses Nominatim (free OpenStreetMap) for geocoding.
+   Web search uses Serper/SerpAPI if keys are set, otherwise DuckDuckGo (free).
+
+────────────────────────────────────────────────────────────────────────────────
+SUMMARY
+────────────────────────────────────────────────────────────────────────────────
+
+API Services used:
+  - Places API — Nearby Search    (1 call/session)
+  - Places API — Text Search      (0-1 calls/session, fallback only)
+  - Places API — Place Details    (up to 15 calls/session)
+  - Places API — Place Photo      (up to 45 browser requests/session, key exposed in URL)
+
+Estimated cost per session: ~$0.27–$0.35 (excluding photo requests)
+Estimated photo cost:       ~$0.32 if all 3 photos load for 15 hotels
+
+Open issues:
+  [ ] GOOGLE_MAPS_API_KEY is included in photo URLs returned to the frontend —
+      anyone with browser devtools can extract it. Fix: proxy the photo through
+      a backend endpoint (e.g. GET /api/proxy/photo?ref=<ref>).
+  [ ] Place Details is called sequentially in a loop — consider asyncio.gather
+      for parallel fetching to reduce latency.
+  [ ] No caching — same place_id can be fetched repeatedly across sessions.

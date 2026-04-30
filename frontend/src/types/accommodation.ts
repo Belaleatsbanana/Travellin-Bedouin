@@ -4,6 +4,7 @@ export interface AccommodationOption {
   id: string;
   name: string;
   type: AccommodationType;
+  description?: string;
   starRating: number;
   pricePerNight: number;
   totalPrice: number;
@@ -14,7 +15,7 @@ export interface AccommodationOption {
     coordinates: { lat: number; lng: number };
   };
   amenities: string[];
-  images: string[];
+  images?: string[];
   bookingUrl?: string;
   rating: number;
   reviewCount: number;

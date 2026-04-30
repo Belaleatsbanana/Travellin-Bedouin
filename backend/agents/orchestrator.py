@@ -1,84 +1,178 @@
 """
 Orchestrator
 ============
-Manages the agent execution sequence:
-  1. Budget Agent runs first
-  2. On completion, the 4 downstream agents run in parallel
-
-The Activities Agent is the only fully implemented agent here.
-Budget / Visa / Accommodation / Transport stubs exist purely for
-integration testing — replace them with your real implementations.
+Sequential pipeline: budget (hidden) → accommodation → activities → transportation.
+Each phase pauses for user confirmation before the next begins.
+Chat refinement regenerates the current phase with updated conversation history.
 """
 
 from __future__ import annotations
-import asyncio
 import logging
 
 from models.session import TripFormData
 from storage import session_store as store
 
 from agents.budget_agent import run_budget_agent
-from agents.visa_agent import run_visa_agent
 from agents.accommodation_agent import run_accommodation_agent
-from agents.transport_agent import run_transport_agent
 from agents.activities_agent import run_activities_agent
+from agents.transport_agent import run_transport_agent
 
 log = logging.getLogger(__name__)
 
 
-async def run_all_agents(session_id: str, form_data: TripFormData) -> None:
+async def run_pipeline(session_id: str, form_data: TripFormData) -> None:
     """
-    Entry point called by the sessions router after creating a session.
-    Runs inside a background asyncio task so the POST /api/sessions
-    response returns immediately.
+    Entry point after session creation. Runs budget agent (hidden), then
+    kicks off accommodation phase. Subsequent phases are triggered by confirm_phase().
     """
     state = store.get_session(session_id)
     if not state:
         log.error("Session %s not found", session_id)
         return
 
-    # ── Phase 1: Budget Agent ─────────────────────────────────────────────────
+    # ── Hidden budget calculation ─────────────────────────────────────────────
     try:
         budget_result = await run_budget_agent(session_id, form_data)
+        state.budget_result = budget_result
     except Exception as exc:
         log.exception("Budget agent failed: %s", exc)
-        await store.update_progress(session_id, "budget", 100, "failed")
-        state.overall_status = "failed"
+        budget_result = {}
+        state.budget_result = {}
+
+    # ── Start accommodation phase ─────────────────────────────────────────────
+    state.current_phase = "accommodation"
+    state.overall_status = "running"
+    await _run_accommodation(session_id, chat_history=[])
+
+
+async def confirm_phase(session_id: str, phase: str, selected_option_id: str | None) -> str | None:
+    """
+    Called when the user confirms a phase. Stores confirmed result, advances
+    current_phase, and kicks off the next phase agent. Returns the next phase name.
+    """
+    state = store.get_session(session_id)
+    if not state:
+        return None
+
+    phase_state = state.phases.get(phase)
+    if not phase_state or phase_state.result is None:
+        return None
+
+    # Store confirmed result (optionally filter to selected option only)
+    result = phase_state.result
+    if selected_option_id and phase == "accommodation":
+        options = result.get("options", [])
+        selected = next((o for o in options if o.get("id") == selected_option_id), None)
+        if selected:
+            result = {**result, "confirmed_option": selected}
+
+    if phase == "accommodation":
+        state.confirmed_accommodation = result
+        state.current_phase = "activities"
+        phase_state.status = "confirmed"
+        state.overall_status = "running"
+        await _run_activities(session_id, chat_history=[])
+        return "activities"
+
+    elif phase == "activities":
+        state.confirmed_activities = result
+        state.current_phase = "transportation"
+        phase_state.status = "confirmed"
+        state.overall_status = "running"
+        await _run_transportation(session_id, chat_history=[])
+        return "transportation"
+
+    elif phase == "transportation":
+        state.confirmed_transport = result
+        phase_state.status = "confirmed"
+        state.current_phase = "done"
+        state.overall_status = "done"
+        return "done"
+
+    return None
+
+
+async def regen_phase(session_id: str, phase: str) -> None:
+    """
+    Regenerate a phase using the current chat_history (called after a new user message).
+    """
+    state = store.get_session(session_id)
+    if not state:
         return
 
-    # ── Phase 2: Downstream agents in parallel ────────────────────────────────
-    breakdown = budget_result.get("breakdown", {})
-    activities_budget = breakdown.get("activities", form_data.totalBudget * 0.20)
-    accommodation_budget = breakdown.get("accommodation", form_data.totalBudget * 0.35)
-    transport_budget = breakdown.get("transportation", form_data.totalBudget * 0.15)
-    visa_budget = breakdown.get("visa_insurance", form_data.totalBudget * 0.05)
+    phase_state = state.phases.get(phase)
+    if not phase_state:
+        return
 
-    results = await asyncio.gather(
-        _safe_run(run_visa_agent, session_id, "visa_insurance", form_data, visa_budget),
-        _safe_run(run_accommodation_agent, session_id, "accommodation", form_data, accommodation_budget),
-        _safe_run(run_transport_agent, session_id, "transportation", form_data, transport_budget),
-        _safe_run(run_activities_agent, session_id, "activities", form_data, activities_budget),
-        return_exceptions=True,
-    )
+    # Reset progress for re-run
+    phase_state.status = "running"
+    phase_state.progress = 0
+    phase_state.thoughts = []
+    state.overall_status = "running"
 
-    for res in results:
-        if isinstance(res, Exception):
-            log.exception("Downstream agent raised: %s", res)
+    chat_history = [{"role": m.role, "content": m.content} for m in phase_state.chat_history]
 
-    # Sync overall status
-    state_now = store.get_session(session_id)
-    if state_now:
-        if state_now.all_completed():
-            state_now.overall_status = "completed"
-        elif state_now.any_failed():
-            state_now.overall_status = "failed"
+    if phase == "accommodation":
+        await _run_accommodation(session_id, chat_history=chat_history)
+    elif phase == "activities":
+        await _run_activities(session_id, chat_history=chat_history)
+    elif phase == "transportation":
+        await _run_transportation(session_id, chat_history=chat_history)
 
 
-async def _safe_run(fn, session_id: str, agent_id: str, form_data: TripFormData, budget: float):
-    """Wrap an agent run; mark it failed on exception rather than crashing gather."""
+# ─── Internal phase runners ────────────────────────────────────────────────────
+
+def _budget_for(state, key: str, fallback_pct: float) -> float:
+    breakdown = (state.budget_result or {}).get("breakdown", {})
+    return breakdown.get(key, state.form_data.totalBudget * fallback_pct)
+
+
+async def _run_accommodation(session_id: str, chat_history: list[dict]) -> None:
+    state = store.get_session(session_id)
+    if not state:
+        return
+    budget = _budget_for(state, "accommodation", 0.35)
     try:
-        return await fn(session_id, form_data, budget)
+        await run_accommodation_agent(session_id, state.form_data, budget, chat_history=chat_history)
+        state.overall_status = "awaiting_confirmation"
     except Exception as exc:
-        log.exception("Agent %s failed: %s", agent_id, exc)
-        await store.update_progress(session_id, agent_id, 100, "failed")
-        raise
+        log.exception("Accommodation agent failed: %s", exc)
+        state.phases["accommodation"].status = "failed"
+        state.overall_status = "failed"
+
+
+async def _run_activities(session_id: str, chat_history: list[dict]) -> None:
+    state = store.get_session(session_id)
+    if not state:
+        return
+    budget = _budget_for(state, "activities", 0.20)
+    try:
+        await run_activities_agent(
+            session_id, state.form_data, budget,
+            accommodation_context=state.confirmed_accommodation,
+            chat_history=chat_history,
+        )
+        state.overall_status = "awaiting_confirmation"
+    except Exception as exc:
+        log.exception("Activities agent failed: %s", exc)
+        state.phases["activities"].status = "failed"
+        state.overall_status = "failed"
+
+
+async def _run_transportation(session_id: str, chat_history: list[dict]) -> None:
+    state = store.get_session(session_id)
+    if not state:
+        return
+    budget = _budget_for(state, "transportation", 0.15)
+    try:
+        await run_transport_agent(
+            session_id, state.form_data, budget,
+            accommodation_context=state.confirmed_accommodation,
+            activities_context=state.confirmed_activities,
+            chat_history=chat_history,
+        )
+        state.overall_status = "awaiting_confirmation"
+    except Exception as exc:
+        log.exception("Transport agent failed: %s", exc)
+        state.phases["transportation"].status = "failed"
+        state.overall_status = "failed"

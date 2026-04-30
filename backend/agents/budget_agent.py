@@ -10,9 +10,10 @@ import asyncio
 import os
 import json
 
-from groq import AsyncGroq
+import groq as groq_sdk
 
 from models.session import TripFormData
+from agents.groq_client import groq_chat
 from storage.session_store import emit_thought, store_result, update_progress
 
 AGENT_ID = "budget"
@@ -37,10 +38,8 @@ async def run_budget_agent(session_id: str, form_data: TripFormData) -> dict:
     await emit_thought(session_id, AGENT_ID, f"Looking up cost-of-living index for {form_data.destinationCity}...", "search")
     await asyncio.sleep(0.5)
 
-    # Use LLM to determine smart percentages (or fall back to defaults)
     percentages = _DEFAULT_PCT.copy()
     try:
-        groq = AsyncGroq(api_key=os.getenv("BUDGET_API_KEY") or os.getenv("GROQ_API_KEY", ""))
         prompt = (
             f"A traveler is going to {form_data.destinationCity}, {form_data.destinationCountry} "
             f"for {form_data.durationNights} nights with a total budget of "
@@ -54,7 +53,8 @@ async def run_budget_agent(session_id: str, form_data: TripFormData) -> dict:
             f'{{ "accommodation": 35, "transportation": 15, "activities": 20, '
             f'"visa_insurance": 5, "contingency": 25 }}'
         )
-        resp = await groq.chat.completions.create(
+        resp = await groq_chat(
+            primary_key_env="BUDGET_API_KEY",
             model=GROQ_MODEL,
             messages=[{"role": "user", "content": prompt}],
             max_tokens=200,
@@ -65,9 +65,10 @@ async def run_budget_agent(session_id: str, form_data: TripFormData) -> dict:
         if all(k in raw for k in percentages):
             total = sum(raw[k] for k in percentages)
             if 95 <= total <= 105:
-                # Normalize to exactly 100
                 factor = 100 / total
                 percentages = {k: round(v * factor) for k, v in raw.items() if k in percentages}
+    except groq_sdk.RateLimitError as exc:
+        print(f"[Budget Agent] RATE LIMIT: {exc}", flush=True)
     except Exception:
         pass
 
