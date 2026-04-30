@@ -28,7 +28,7 @@ async def run_visa_agent(
     await emit_thought(session_id, AGENT_ID, "Fetching travel advisory level...", "search")
     await asyncio.sleep(0.5)
 
-    groq = AsyncGroq(api_key=os.getenv("GROQ_API_KEY", ""))
+    groq = AsyncGroq(api_key=os.getenv("VISA_API_KEY") or os.getenv("GROQ_API_KEY", ""))
     prompt = (
         f"A {form_data.passportNationality} passport holder is traveling to "
         f"{form_data.destinationCity}, {form_data.destinationCountry} "

@@ -40,7 +40,7 @@ async def run_budget_agent(session_id: str, form_data: TripFormData) -> dict:
     # Use LLM to determine smart percentages (or fall back to defaults)
     percentages = _DEFAULT_PCT.copy()
     try:
-        groq = AsyncGroq(api_key=os.getenv("GROQ_API_KEY", ""))
+        groq = AsyncGroq(api_key=os.getenv("BUDGET_API_KEY") or os.getenv("GROQ_API_KEY", ""))
         prompt = (
             f"A traveler is going to {form_data.destinationCity}, {form_data.destinationCountry} "
             f"for {form_data.durationNights} nights with a total budget of "

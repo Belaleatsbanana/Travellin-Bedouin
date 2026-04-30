@@ -11,13 +11,20 @@ import { ArrowRight, Loader2 } from "lucide-react";
 
 export function AgentOrchestrator() {
   const router = useRouter();
-  const { sessionId } = useTripStore();
+  const { sessionId, resetTrip } = useTripStore();
   const { overallStatus } = useAgentStore();
-  const { isComplete, isError } = useAgentPolling(sessionId);
+  const { isComplete, isError, isSessionNotFound } = useAgentPolling(sessionId);
 
   useEffect(() => {
     if (!sessionId) router.push("/plan");
   }, [sessionId, router]);
+
+  useEffect(() => {
+    if (isSessionNotFound) {
+      resetTrip();
+      router.push("/plan");
+    }
+  }, [isSessionNotFound, resetTrip, router]);
 
   return (
     <div className="space-y-8">

@@ -436,7 +436,7 @@ async def _run(session_id: str, form_data: TripFormData, budget_allocated: float
         f"Use your knowledge of {form_data.destinationCity} to fill in realistic activities."
     )
 
-    groq_client = AsyncGroq(api_key=os.getenv("GROQ_API_KEY", ""))
+    groq_client = AsyncGroq(api_key=os.getenv("ACTIVITY_API_KEY") or os.getenv("GROQ_API_KEY", ""))
 
     try:
         response = await groq_client.chat.completions.create(

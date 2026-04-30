@@ -244,7 +244,7 @@ async def _curate_with_llm(
     """
     Use Groq LLM to curate final accommodation recommendations from real hotel data.
     """
-    groq = AsyncGroq(api_key=os.getenv("GROQ_API_KEY", ""))
+    groq = AsyncGroq(api_key=os.getenv("ACCOMMODATION_API_KEY") or os.getenv("GROQ_API_KEY", ""))
     
     # Build comprehensive prompt with real hotel data
     hotel_json = json.dumps(hotel_data, indent=2)

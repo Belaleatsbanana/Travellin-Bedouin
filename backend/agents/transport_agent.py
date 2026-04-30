@@ -27,7 +27,7 @@ async def run_transport_agent(
     await asyncio.sleep(0.9)
     await update_progress(session_id, AGENT_ID, 35)
 
-    groq = AsyncGroq(api_key=os.getenv("GROQ_API_KEY", ""))
+    groq = AsyncGroq(api_key=os.getenv("TRANSPORTATION_API_KEY") or os.getenv("GROQ_API_KEY", ""))
     prompt = (
         f"Find transport options for {form_data.travelers.adults} adults in "
         f"{form_data.destinationCity}, {form_data.destinationCountry} "
