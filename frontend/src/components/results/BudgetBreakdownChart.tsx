@@ -1,5 +1,9 @@
 "use client";
 
+// frontend/src/components/results/BudgetBreakdownChart.tsx
+// Displays the pie chart + breakdown table produced by the Budget Agent.
+// Shows AI citation sources when they are returned by the real backend.
+
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from "recharts";
 import type { BudgetAllocation } from "@/types/budget";
 import { formatCurrency } from "@/lib/utils";
@@ -35,9 +39,13 @@ export function BudgetBreakdownChart({ allocation }: Props) {
     pct: allocation.percentages[key as keyof typeof allocation.percentages],
   }));
 
+  const hasSources = allocation.sources && allocation.sources.length > 0;
+
   return (
-    <div className="bg-white rounded-2xl border border-brand-sand/20 p-6">
-      <h3 className="font-serif font-semibold text-brand-night mb-4">Budget Breakdown</h3>
+    <div className="bg-white rounded-2xl border border-brand-sand/20 p-6 space-y-4">
+      <h3 className="font-serif font-semibold text-brand-night">Budget Breakdown</h3>
+
+      {/* ── Pie chart + legend ─────────────────────────────────────── */}
       <div className="flex flex-col md:flex-row items-center gap-6">
         <div className="w-48 h-48 shrink-0">
           <ResponsiveContainer width="100%" height="100%">
@@ -77,6 +85,8 @@ export function BudgetBreakdownChart({ allocation }: Props) {
               </span>
             </div>
           ))}
+
+          {/* Total row */}
           <div className="border-t border-gray-100 pt-2 flex justify-between">
             <span className="text-sm font-semibold text-brand-night">Total Budget</span>
             <span className="text-sm font-bold text-brand-dune">
@@ -85,6 +95,23 @@ export function BudgetBreakdownChart({ allocation }: Props) {
           </div>
         </div>
       </div>
+
+      {/* ── AI sources — only visible when the real backend is running ── */}
+      {hasSources && (
+        <div className="border-t border-gray-100 pt-4">
+          <p className="text-xs font-semibold text-brand-night/40 uppercase tracking-wide mb-2">
+            AI Research Sources
+          </p>
+          <ul className="space-y-1">
+            {allocation.sources!.map((src, i) => (
+              <li key={i} className="text-xs text-brand-night/60 flex items-start gap-1.5">
+                <span className="text-brand-sand mt-0.5">•</span>
+                {src}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </div>
   );
 }
