@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { fetchFullResults } from "@/lib/api/trip";
@@ -10,11 +10,21 @@ import { TripSummaryHeader } from "@/components/results/TripSummaryHeader";
 import { BudgetBreakdownChart } from "@/components/results/BudgetBreakdownChart";
 import { AccommodationSection } from "@/components/results/accommodation/AccommodationSection";
 import { DayTimeline } from "@/components/results/DayTimeline";
-import { Loader2, Building2, Calendar, Car, Wallet } from "lucide-react";
+import { useSelectionStore } from "@/store/selectionStore";
+import { Loader2, Building2, Car, Wallet } from "lucide-react";
 import { cn, formatCurrency } from "@/lib/utils";
-import type { DaySchedule, ActivitiesAgentResult } from "@/types/activities";
+import type { DaySchedule, ScheduledSlot, ActivitiesAgentResult } from "@/types/activities";
 import type { TransportAgentResult, DayLegs } from "@/types/transport";
 import type { AccommodationAgentResult } from "@/types/accommodation";
+
+// Time slots to assign when rebuilding schedule from selections
+const DAY_SLOTS: [string, string][] = [
+  ["09:00", "12:00"],
+  ["14:00", "17:00"],
+  ["19:00", "21:00"],
+  ["07:30", "10:30"],
+  ["11:00", "14:00"],
+];
 
 export default function ResultsPage() {
   const params = useParams();
@@ -29,6 +39,12 @@ export default function ResultsPage() {
     staleTime: Infinity,
     retry: false,
   });
+
+  const {
+    selectedAccommodationId,
+    selectedTransportIds,
+    selectedActivityIds,
+  } = useSelectionStore();
 
   const isNotFound = (error as (Error & { status?: number }) | null)?.status === 404;
 
@@ -75,33 +91,107 @@ export default function ResultsPage() {
   const activities = data?.activities as ActivitiesAgentResult | undefined;
   const transport = data?.transport as TransportAgentResult | undefined;
 
-  const confirmedOption = (accommodation as any)?.confirmed_option ||
-    (accommodation?.options?.[0]) || null;
+  const confirmedOption =
+    accommodation?.options?.find((o) => o.id === selectedAccommodationId) ||
+    (accommodation as any)?.confirmed_option ||
+    accommodation?.options?.[0] ||
+    null;
 
-  const schedule: DaySchedule[] = activities?.schedule || [];
+  // ── Actual costs from user selections ────────────────────────────────────
+
+  const actualAccCost = (() => {
+    if (selectedAccommodationId && accommodation?.options) {
+      const opt = accommodation.options.find((o) => o.id === selectedAccommodationId);
+      if (opt) return opt.totalPrice;
+    }
+    return budget?.accommodationTotal ?? 0;
+  })();
+
+  const actualTransportCost = (() => {
+    if (transport && Object.keys(selectedTransportIds).length > 0) {
+      const allOptions = Object.values(transport.options).flat();
+      return Object.values(selectedTransportIds).reduce((sum, id) => {
+        const opt = allOptions.find((o) => o.id === id);
+        return sum + (opt?.priceTotal ?? 0);
+      }, 0);
+    }
+    return budget?.transportTotal ?? 0;
+  })();
+
+  const selectedActivities = useMemo(
+    () => (activities?.activities ?? []).filter((a) => selectedActivityIds.includes(a.id)),
+    [activities, selectedActivityIds],
+  );
+
+  const actualActivitiesCost = selectedActivities.reduce((s, a) => s + a.price, 0) ||
+    budget?.activitiesTotal || 0;
+
+  // ── Rebuild schedule from selected activities, evenly distributed ─────────
+
+  const rebuiltSchedule: DaySchedule[] = useMemo(() => {
+    const dayMeta = activities?.schedule ?? [];
+    if (!dayMeta.length) return [];
+
+    // If no selections yet, fall back to the backend-generated schedule
+    if (!selectedActivityIds.length) return dayMeta;
+
+    const n = selectedActivities.length;
+    const d = dayMeta.length;
+    const base = Math.floor(n / d);
+    const extras = n % d;
+
+    let cursor = 0;
+    return dayMeta.map((day, i) => {
+      const count = base + (i < extras ? 1 : 0);
+      const dayActs = selectedActivities.slice(cursor, cursor + count);
+      cursor += count;
+
+      const slots: ScheduledSlot[] = dayActs.map((act, j) => {
+        const [startTime, endTime] = DAY_SLOTS[j % DAY_SLOTS.length];
+        return {
+          startTime,
+          endTime,
+          type: "activity" as const,
+          activityId: act.id,
+          activityName: act.name,
+          locationName: act.location,
+          coordinates: act.coordinates,
+        };
+      });
+
+      return { day: day.day, date: day.date, slots, freeTime: day.freeTime };
+    });
+  }, [selectedActivityIds, selectedActivities, activities]);
+
   const dailyLegs: DayLegs[] = transport?.dailyLegs || [];
 
-  const activeDaySchedule = schedule.find((d) => d.day === activeDay);
+  const activeDaySchedule = rebuiltSchedule.find((d) => d.day === activeDay);
   const activeDayLegs = dailyLegs.find((d) => d.day === activeDay);
 
-  // Build budget display from confirmed actuals
+  // ── Budget chart — use actual selection costs ─────────────────────────────
+
+  const totalBudget = budget?.totalBudget ?? 0;
+  const contingency = Math.max(0, totalBudget - actualAccCost - actualTransportCost - actualActivitiesCost);
+
   const budgetChartData = budget
     ? {
-        totalBudget: budget.totalBudget,
+        totalBudget,
         currency: budget.currency,
         breakdown: {
-          accommodation: budget.accommodationTotal,
-          transportation: budget.transportTotal,
-          activities: budget.activitiesTotal,
+          accommodation: actualAccCost,
+          transportation: actualTransportCost,
+          activities: actualActivitiesCost,
           visa_insurance: 0,
-          contingency: Math.max(0, budget.totalBudget - budget.accommodationTotal - budget.transportTotal - budget.activitiesTotal),
+          contingency,
         },
         percentages: {
-          accommodation: budget.totalBudget ? Math.round((budget.accommodationTotal / budget.totalBudget) * 100) : 0,
-          transportation: budget.totalBudget ? Math.round((budget.transportTotal / budget.totalBudget) * 100) : 0,
-          activities: budget.totalBudget ? Math.round((budget.activitiesTotal / budget.totalBudget) * 100) : 0,
+          accommodation: totalBudget ? Math.round((actualAccCost / totalBudget) * 100) : 0,
+          transportation: totalBudget ? Math.round((actualTransportCost / totalBudget) * 100) : 0,
+          activities: totalBudget ? Math.round((actualActivitiesCost / totalBudget) * 100) : 0,
           visa_insurance: 0,
-          contingency: budget.totalBudget ? Math.max(0, 100 - Math.round(((budget.accommodationTotal + budget.transportTotal + budget.activitiesTotal) / budget.totalBudget) * 100)) : 0,
+          contingency: totalBudget
+            ? Math.max(0, 100 - Math.round(((actualAccCost + actualTransportCost + actualActivitiesCost) / totalBudget) * 100))
+            : 0,
         },
         sources: [],
       }
@@ -115,7 +205,7 @@ export default function ResultsPage() {
           {formData && budget && (
             <TripSummaryHeader
               formData={formData}
-              totalBudget={budget.totalBudget}
+              totalBudget={totalBudget}
               currency={budget.currency}
             />
           )}
@@ -137,7 +227,7 @@ export default function ResultsPage() {
                   <div className="flex justify-between text-xs pt-1 border-t border-gray-100">
                     <span className="text-brand-night/50">{formData?.durationNights} nights</span>
                     <span className="font-bold text-brand-dune">
-                      {budget && formatCurrency(budget.accommodationTotal, budget.currency)}
+                      {formatCurrency(actualAccCost, budget?.currency ?? "USD")}
                     </span>
                   </div>
                 </div>
@@ -151,9 +241,9 @@ export default function ResultsPage() {
                     Confirmed Spend
                   </div>
                   {[
-                    { label: "Accommodation", value: budget.accommodationTotal },
-                    { label: "Activities", value: budget.activitiesTotal },
-                    { label: "Transport", value: budget.transportTotal },
+                    { label: "Accommodation", value: actualAccCost },
+                    { label: "Activities", value: actualActivitiesCost },
+                    { label: "Transport", value: actualTransportCost },
                   ].map(({ label, value }) => (
                     <div key={label} className="flex justify-between text-sm">
                       <span className="text-brand-night/60">{label}</span>
@@ -163,7 +253,7 @@ export default function ResultsPage() {
                   <div className="border-t border-gray-100 pt-2 flex justify-between font-bold">
                     <span>Total</span>
                     <span className="text-brand-dune">
-                      {formatCurrency(budget.accommodationTotal + budget.activitiesTotal + budget.transportTotal, budget.currency)}
+                      {formatCurrency(actualAccCost + actualActivitiesCost + actualTransportCost, budget.currency)}
                     </span>
                   </div>
                 </div>
@@ -175,7 +265,7 @@ export default function ResultsPage() {
               <div className="bg-white rounded-2xl border border-brand-sand/20 overflow-hidden">
                 {/* Day tabs */}
                 <div className="flex items-center gap-0 overflow-x-auto border-b border-gray-100 px-2">
-                  {schedule.map((day) => (
+                  {rebuiltSchedule.map((day) => (
                     <button
                       key={day.day}
                       onClick={() => setActiveDay(day.day)}
@@ -187,7 +277,13 @@ export default function ResultsPage() {
                       )}
                     >
                       <span className="block text-xs text-brand-night/40">Day {day.day}</span>
-                      <span className="text-xs">{new Date(day.date + "T00:00:00").toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}</span>
+                      <span className="text-xs">
+                        {new Date(day.date + "T00:00:00").toLocaleDateString(undefined, {
+                          weekday: "short",
+                          month: "short",
+                          day: "numeric",
+                        })}
+                      </span>
                     </button>
                   ))}
                 </div>
@@ -203,7 +299,9 @@ export default function ResultsPage() {
                       />
                       {activeDaySchedule.freeTime && (
                         <div className="mt-4 pt-4 border-t border-gray-100">
-                          <p className="text-xs font-semibold text-brand-night/40 uppercase tracking-wide mb-1">Free Time</p>
+                          <p className="text-xs font-semibold text-brand-night/40 uppercase tracking-wide mb-1">
+                            Free Time
+                          </p>
                           <p className="text-sm text-brand-night/60">{activeDaySchedule.freeTime}</p>
                         </div>
                       )}

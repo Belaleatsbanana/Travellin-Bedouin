@@ -26,7 +26,6 @@ import re
 import traceback
 from typing import Any
 
-import googlemaps
 import groq as groq_sdk
 import httpx
 
@@ -56,6 +55,7 @@ _HOTEL_IMAGES: dict[str, list[str]] = {
 
 async def _geocode_destination(city: str, country: str) -> dict[str, Any] | None:
     """Get coordinates for destination city using Nominatim (free OpenStreetMap geocoding)."""
+    print(f"[Accommodation] Nominatim geocode request: q={city!r}, {country!r}", flush=True)
     async with httpx.AsyncClient() as client:
         try:
             resp = await client.get(
@@ -64,19 +64,34 @@ async def _geocode_destination(city: str, country: str) -> dict[str, Any] | None
                 headers={"User-Agent": "TravellinBedouin/1.0"},
                 timeout=10.0,
             )
+            print(
+                f"[Accommodation] Nominatim response: status={resp.status_code} "
+                f"results={len(resp.json()) if resp.status_code == 200 else 0}",
+                flush=True,
+            )
             if resp.status_code == 200 and resp.json():
                 result = resp.json()[0]
-                return {
+                geo = {
                     "lat": float(result["lat"]),
                     "lng": float(result["lon"]),
                     "display_name": result.get("display_name", ""),
                 }
+                print(f"[Accommodation] Geocoded to lat={geo['lat']:.4f}, lng={geo['lng']:.4f}", flush=True)
+                return geo
         except Exception as exc:
-            print(f"Geocoding error: {exc}")
+            print(f"[Accommodation] Nominatim geocode ERROR: {type(exc).__name__}: {exc}", flush=True)
     return None
 
 
-def _search_hotels(
+_TEXT_SEARCH_FIELD_MASK = (
+    "places.id,places.displayName,places.formattedAddress,"
+    "places.rating,places.userRatingCount,places.types,places.primaryType,"
+    "places.location,places.websiteUri,places.nationalPhoneNumber,"
+    "places.currentOpeningHours"
+)
+
+
+async def _search_hotels(
     city: str,
     country: str,
     accommodation_type: str,
@@ -84,163 +99,96 @@ def _search_hotels(
     longitude: float | None,
     num_results: int = 15,
 ) -> list[dict[str, Any]]:
-    """
-    Search for hotels using Google Maps Places API.
-    
-    accommodation_type can be: "hotel", "apartment", "chalet", "villa", "hostel"
-    Searches for the most relevant type and includes alternatives.
-    """
+    """Search for hotels using Text Search (New) REST API."""
     if not GOOGLE_MAPS_API_KEY:
+        print("[Accommodation] Google Maps API key not set — skipping hotel search", flush=True)
         return []
 
+    # Map user-facing preference values to meaningful search terms
+    _PREF_TO_QUERY: dict[str, str] = {
+        "any":       "hotel",
+        "hotel":     "hotel",
+        "apartment": "serviced apartment",
+        "villa":     "villa",
+        "chalet":    "chalet",
+        "hostel":    "hostel",
+        "resort":    "resort",
+        "airbnb":    "hotel",
+    }
+    query_type = _PREF_TO_QUERY.get(accommodation_type.lower(), "hotel")
+    search_query = f"{query_type} in {city}, {country}"
+    body: dict[str, Any] = {
+        "textQuery": search_query,
+        "includedType": "lodging",
+        "pageSize": min(num_results, 20),
+    }
+
+    if latitude is not None and longitude is not None:
+        body["locationBias"] = {
+            "circle": {
+                "center": {"latitude": latitude, "longitude": longitude},
+                "radius": 5000.0,
+            }
+        }
+        print(
+            f"[Accommodation] Text Search (New): query={search_query!r} (preference={accommodation_type!r} → {query_type!r}) "
+            f"locationBias=({latitude:.4f},{longitude:.4f})",
+            flush=True,
+        )
+    else:
+        print(f"[Accommodation] Text Search (New): query={search_query!r} (no coordinates)", flush=True)
+
     try:
-        gmaps = googlemaps.Client(key=GOOGLE_MAPS_API_KEY)
-        
-        # Build search query
-        search_query = f"{accommodation_type} in {city}, {country}"
-        
-        # If we have coordinates, search nearby; otherwise use text search
-        if latitude is not None and longitude is not None:
-            places_result = gmaps.places_nearby(
-                location=(latitude, longitude),
-                radius=5000,  # 5 km radius
-                type="lodging",
-                keyword=accommodation_type,
-                rank_by="prominence",
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(
+                "https://places.googleapis.com/v1/places:searchText",
+                json=body,
+                headers={
+                    "Content-Type": "application/json",
+                    "X-Goog-Api-Key": GOOGLE_MAPS_API_KEY,
+                    "X-Goog-FieldMask": _TEXT_SEARCH_FIELD_MASK,
+                },
+                timeout=12.0,
             )
+        print(
+            f"[Accommodation] Text Search response: status={resp.status_code} "
+            f"body_len={len(resp.content)} bytes",
+            flush=True,
+        )
+        if resp.status_code == 200:
+            places = resp.json().get("places", [])
+            print(f"[Accommodation] Text Search returned {len(places)} hotels", flush=True)
+            hotels = []
+            for place in places:
+                loc = place.get("location", {})
+                name = place.get("displayName", {}).get("text", "Unknown Hotel")
+                rating = place.get("rating", 0)
+                print(
+                    f"[Accommodation] Hotel: {name!r} rating={rating}",
+                    flush=True,
+                )
+                hotels.append({
+                    "name": name,
+                    "address": place.get("formattedAddress", ""),
+                    "rating": round(rating, 1) if rating else 0,
+                    "review_count": place.get("userRatingCount", 0),
+                    "types": place.get("types", []),
+                    "primary_type": place.get("primaryType", ""),
+                    "coordinates": {
+                        "lat": loc.get("latitude", 0),
+                        "lng": loc.get("longitude", 0),
+                    },
+                    "website": place.get("websiteUri", ""),
+                    "phone": place.get("nationalPhoneNumber", ""),
+                    "is_open": place.get("currentOpeningHours", {}).get("openNow", True),
+                })
+            return hotels
         else:
-            places_result = gmaps.places(
-                query=search_query,
-                type="lodging",
-            )
-        
-        hotels = places_result.get("results", [])
-        
-        # Get more detailed info for each hotel
-        detailed_hotels = []
-        for hotel in hotels[:num_results]:
-            place_id = hotel.get("place_id")
-            if place_id:
-                try:
-                    details = gmaps.place(place_id=place_id)["result"]
-                    detailed_hotels.append(details)
-                except Exception as e:
-                    print(f"Error fetching details for {place_id}: {e}")
-                    detailed_hotels.append(hotel)  # Fall back to basic info
-        
-        return detailed_hotels
+            print(f"[Accommodation] Text Search error body: {resp.text[:400]}", flush=True)
     except Exception as exc:
-        print(f"Google Maps API unavailable - using LLM fallback: {exc}")
-    
+        print(f"[Accommodation] Text Search ERROR: {type(exc).__name__}: {exc}", flush=True)
+
     return []
-
-
-def _extract_hotel_data(hotel: dict[str, Any]) -> dict[str, Any]:
-    """
-    Extract relevant hotel information from Google Places data.
-    
-    Returns structured data with:
-    - name, address, rating, review count
-    - amenities (inferred from types)
-    - coordinates, photos
-    - estimated price (inferred or default)
-    """
-    name = hotel.get("name", "Unknown Hotel")
-    
-    # Basic info
-    address = hotel.get("formatted_address", "")
-    rating = hotel.get("rating", 0)
-    review_count = hotel.get("user_ratings_total", 0)
-    types = hotel.get("types", [])
-    
-    # Coordinates
-    location = hotel.get("geometry", {}).get("location", {})
-    lat = location.get("lat", 0)
-    lng = location.get("lng", 0)
-    
-    # Amenities (inferred from place types and formatted address)
-    amenities = _infer_amenities(hotel, types)
-    
-    # Photos
-    photos = []
-    for photo in hotel.get("photos", [])[:3]:  # Take up to 3 photos
-        photo_ref = photo.get("photo_reference", "")
-        if photo_ref and GOOGLE_MAPS_API_KEY:
-            photo_url = (
-                f"https://maps.googleapis.com/maps/api/place/photo?"
-                f"maxwidth=400&photo_reference={photo_ref}&key={GOOGLE_MAPS_API_KEY}"
-            )
-            photos.append(photo_url)
-    
-    # Opening hours / availability
-    opening_hours = hotel.get("opening_hours", {})
-    is_open = opening_hours.get("open_now", True)
-    
-    # Phone and website
-    phone = hotel.get("formatted_phone_number", "")
-    website = hotel.get("website", "")
-    
-    return {
-        "name": name,
-        "address": address,
-        "rating": round(rating, 1) if rating else 0,
-        "review_count": review_count,
-        "types": types,
-        "amenities": amenities,
-        "coordinates": {"lat": lat, "lng": lng},
-        "photos": photos,
-        "is_open": is_open,
-        "phone": phone,
-        "website": website,
-        "place_id": hotel.get("place_id", ""),
-        "url": hotel.get("url", ""),
-    }
-
-
-def _infer_amenities(hotel: dict[str, Any], types: list[str]) -> list[str]:
-    """
-    Infer amenities from place types and business status.
-    
-    Types typically include things like:
-    - lodging, point_of_interest, establishment
-    - parking_lot, restaurant, spa, pool, etc.
-    """
-    amenities = set()
-    
-    # Check place types for common amenities
-    type_amenity_map = {
-        "parking": "Free Parking",
-        "restaurant": "On-site Restaurant",
-        "cafe": "Café",
-        "spa": "Spa & Wellness",
-        "gym": "Fitness Center",
-        "bar": "Bar & Lounge",
-        "pool": "Swimming Pool",
-        "laundry": "Laundry Service",
-        "internet": "Free WiFi",
-    }
-    
-    for place_type in types:
-        for key, amenity_name in type_amenity_map.items():
-            if key in place_type.lower():
-                amenities.add(amenity_name)
-    
-    # Add standard hotel amenities
-    if "hotel" in types or any("lodging" in t for t in types):
-        amenities.add("24-hour Front Desk")
-        amenities.add("Room Service")
-    
-    # Based on rating, infer quality amenities
-    rating = hotel.get("rating", 0)
-    if rating >= 4.5:
-        amenities.add("Concierge Service")
-        amenities.add("Premium Bedding")
-        amenities.update(["Luxury Toiletries", "Air Conditioning"])
-    elif rating >= 4.0:
-        amenities.add("Breakfast Options")
-        amenities.add("Air Conditioning")
-    
-    return sorted(list(amenities))
 
 
 # ─── Phase B: LLM Curation ────────────────────────────────────────────────────
@@ -257,18 +205,14 @@ async def _curate_with_llm(
     Use Groq LLM to curate final accommodation recommendations from real hotel data.
     """
     has_real_data = bool(hotel_data)
-    if has_real_data:
-        data_section = (
-            f"HOTEL DATA FROM GOOGLE MAPS:\n{json.dumps(hotel_data, indent=2)}\n\n"
-            "YOUR TASK: Select the 3 BEST hotel options FROM THE DATA ABOVE that match the user's budget and preference. "
-            "Use REAL names, ratings, and review counts from the data.\n"
-        )
-    else:
-        data_section = (
-            "NOTE: No live hotel data is available. Use your knowledge of real hotels in "
-            f"{form_data.destinationCity}, {form_data.destinationCountry} to suggest 3 realistic options. "
-            "Use real hotel names that actually exist in that city.\n"
-        )
+    if not has_real_data:
+        return {}
+
+    data_section = (
+        f"HOTEL DATA FROM GOOGLE MAPS:\n{json.dumps(hotel_data, indent=2)}\n\n"
+        "YOUR TASK: Select the 8 BEST hotel options FROM THE DATA ABOVE that match the user's budget and preference. "
+        "Use REAL names, ratings, and review counts from the data.\n"
+    )
 
     prompt = f"""You are the Accommodation Agent.
 
@@ -308,7 +252,7 @@ Return ONLY valid JSON with this exact structure:
     ]
 }}
 
-Rules: 3 options, mark best-value as recommended=true, prices within budget, omit images field, return JSON only."""
+Rules: 8 options spanning a range of price points (budget → premium), mark best-value as recommended=true, prices within budget, omit images field, return JSON only."""
 
     messages: list[dict] = [{"role": "user", "content": prompt}]
 
@@ -328,7 +272,7 @@ Rules: 3 options, mark best-value as recommended=true, prices within budget, omi
             primary_key_env="ACCOMMODATION_API_KEY",
             model=GROQ_MODEL,
             messages=messages,
-            max_tokens=2500,
+            max_tokens=4000,
             temperature=0.3,
             response_format={"type": "json_object"},
         )
@@ -398,7 +342,7 @@ async def run_accommodation_agent(
     await update_progress(session_id, AGENT_ID, 30)
     
     # Search Google Maps for hotels
-    hotels = _search_hotels(
+    hotels = await _search_hotels(
         form_data.destinationCity,
         form_data.destinationCountry,
         form_data.accommodationPreference,
@@ -406,7 +350,7 @@ async def run_accommodation_agent(
         lng,
         num_results=15,
     )
-    
+
     await emit_thought(
         session_id,
         AGENT_ID,
@@ -417,20 +361,25 @@ async def run_accommodation_agent(
         await emit_thought(
             session_id,
             AGENT_ID,
-            "Google Maps unavailable — using AI knowledge for recommendations",
-            "info",
+            "Google Maps returned no results — check that Places API (New) is enabled in your Google Cloud Console",
+            "warning",
         )
+        await store_result(session_id, AGENT_ID, {
+            "budgetAllocated": budget_allocated,
+            "currency": form_data.currency,
+            "recommendation": "No accommodation data available — Google Maps Places API returned no results.",
+            "options": [],
+        })
+        await update_progress(session_id, AGENT_ID, 100, "completed")
+        return {}
     await update_progress(session_id, AGENT_ID, 50)
-    
-    # Extract relevant data from each hotel
-    hotel_data_list = []
-    for i, hotel in enumerate(hotels[:10]):  # Process top 10
-        hotel_data = _extract_hotel_data(hotel)
-        hotel_data_list.append(hotel_data)
+
+    hotel_data_list = hotels[:10]
+    for hotel in hotel_data_list:
         await emit_thought(
             session_id,
             AGENT_ID,
-            f"Retrieved: {hotel_data['name']} ({hotel_data['rating']}★, {hotel_data['review_count']} reviews)",
+            f"Retrieved: {hotel['name']} ({hotel['rating']}★, {hotel['review_count']} reviews)",
             "search",
         )
     

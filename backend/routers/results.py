@@ -79,10 +79,23 @@ async def get_activities(session_id: str):
 @router.get("/{session_id}/results/full")
 async def get_full(session_id: str):
     state = _require_completed(session_id)
+
+    budget_raw = state.results.get("budget")
+    confirmed_budget = None
+    if budget_raw:
+        breakdown = budget_raw.get("breakdown", {})
+        confirmed_budget = {
+            "totalBudget": budget_raw.get("totalBudget", 0),
+            "currency": budget_raw.get("currency", "USD"),
+            "accommodationTotal": breakdown.get("accommodation", 0),
+            "activitiesTotal": breakdown.get("activities", 0),
+            "transportTotal": breakdown.get("transportation", 0),
+        }
+
     return {
         "sessionId": session_id,
         "formData": state.form_data.model_dump(),
-        "budget": state.results.get("budget"),
+        "budget": confirmed_budget,
         "visa": state.results.get("visa"),
         "accommodation": state.results.get("accommodation"),
         "transport": state.results.get("transport"),

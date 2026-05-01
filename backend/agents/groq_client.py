@@ -69,21 +69,36 @@ async def groq_chat(
 
     for m in models:
         for i, key in enumerate(keys):
+            key_label = f"key #{i + 1} ({primary_key_env if i == 0 else _FALLBACK_KEY_ENVS[i - 1]})"
+            print(
+                f"[Groq] REQUEST  model={m} | {key_label} | "
+                f"messages={len(messages)} | max_tokens={max_tokens} | temp={temperature}",
+                flush=True,
+            )
             try:
                 client = AsyncGroq(api_key=key)
-                return await client.chat.completions.create(
+                result = await client.chat.completions.create(
                     model=m,
                     messages=messages,
                     max_tokens=max_tokens,
                     temperature=temperature,
                     **kwargs,
                 )
-            except (groq_sdk.RateLimitError, groq_sdk.APIStatusError, groq_sdk.BadRequestError) as exc:
+                content_len = len(result.choices[0].message.content or "") if result.choices else 0
+                print(
+                    f"[Groq] RESPONSE model={m} | {key_label} | "
+                    f"content_len={content_len} chars | "
+                    f"usage={result.usage}",
+                    flush=True,
+                )
+                return result
+            except (groq_sdk.RateLimitError, groq_sdk.APIStatusError, groq_sdk.BadRequestError, groq_sdk.AuthenticationError) as exc:
                 is_retryable = (
-                    exc.status_code in (429, 413) or
+                    exc.status_code in (401, 429, 413) or
                     "rate_limit" in str(exc).lower() or
                     "too large" in str(exc).lower() or
-                    "decommissioned" in str(exc).lower()
+                    "decommissioned" in str(exc).lower() or
+                    "invalid_api_key" in str(exc).lower()
                 )
                 if is_retryable:
                     last_exc = exc

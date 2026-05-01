@@ -5,7 +5,7 @@ import type { ActivitiesAgentResult, Activity } from "@/types/activities";
 import { DURATION_LABELS } from "@/types/activities";
 import { useSelectionStore } from "@/store/selectionStore";
 import { SectionHeader } from "../shared/SectionHeader";
-import { Sparkles, Clock, MapPin, Star, Check, Calendar, AlertTriangle, Info } from "lucide-react";
+import { Sparkles, Clock, MapPin, Star, Check, AlertTriangle, Info } from "lucide-react";
 import { cn, formatCurrency } from "@/lib/utils";
 
 const CATEGORY_COLORS: Record<string, string> = {
@@ -22,11 +22,59 @@ const CATEGORY_COLORS: Record<string, string> = {
   beach:     "bg-cyan-100 text-cyan-700",
 };
 
-function ActivityCard({ activity, isSelected, onToggle, dayLabel, isAtMax }: {
+/** Spread N activities evenly across D days. Returns count per day index. */
+function buildDayDistribution(selectedCount: number, days: number): number[] {
+  if (days <= 0) return [];
+  const base = Math.floor(selectedCount / days);
+  const extras = selectedCount % days;
+  return Array.from({ length: days }, (_, i) => base + (i < extras ? 1 : 0));
+}
+
+function DayDistributionPreview({ selectedCount, durationNights }: {
+  selectedCount: number;
+  durationNights: number;
+}) {
+  const distribution = buildDayDistribution(selectedCount, durationNights);
+
+  return (
+    <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 space-y-2">
+      <p className="text-xs font-semibold text-brand-night/60 uppercase tracking-wide">
+        Day-by-day distribution preview
+      </p>
+      <div className="flex flex-wrap gap-2">
+        {distribution.map((count, i) => (
+          <div
+            key={i}
+            className={cn(
+              "flex flex-col items-center rounded-lg px-3 py-2 min-w-[60px] text-center transition-all",
+              count === 0
+                ? "bg-white border border-gray-200 text-brand-night/30"
+                : count === 1
+                ? "bg-blue-50 border border-blue-200 text-blue-700"
+                : count === 2
+                ? "bg-emerald-50 border border-emerald-200 text-emerald-700"
+                : "bg-amber-50 border border-amber-300 text-amber-700"
+            )}
+          >
+            <span className="text-[10px] font-medium">Day {i + 1}</span>
+            <span className="text-lg font-bold leading-tight">{count}</span>
+            <span className="text-[9px] opacity-70">{count === 1 ? "activity" : "activities"}</span>
+          </div>
+        ))}
+      </div>
+      {selectedCount > 0 && (
+        <p className="text-[10px] text-brand-night/40">
+          Activities are distributed evenly — exact schedule is generated automatically.
+        </p>
+      )}
+    </div>
+  );
+}
+
+function ActivityCard({ activity, isSelected, onToggle, isAtMax }: {
   activity: Activity;
   isSelected: boolean;
   onToggle: (id: string) => void;
-  dayLabel?: string;
   isAtMax: boolean;
 }) {
   const blocked = isAtMax && !isSelected;
@@ -42,11 +90,6 @@ function ActivityCard({ activity, isSelected, onToggle, dayLabel, isAtMax }: {
       <div className="p-4">
         <div className="flex items-start justify-between mb-2">
           <div className="flex gap-1.5 flex-wrap max-w-[75%]">
-            {dayLabel && (
-              <span className="px-2 py-0.5 rounded-full bg-gray-100 text-brand-night text-[10px] font-bold flex items-center gap-1">
-                <Calendar className="w-2.5 h-2.5" /> {dayLabel}
-              </span>
-            )}
             <span className={cn("px-2 py-0.5 rounded-full text-[10px] font-semibold capitalize", CATEGORY_COLORS[activity.category] || "bg-gray-100 text-gray-700")}>
               {activity.category}
             </span>
@@ -99,7 +142,6 @@ export function ActivitiesSection({ result, durationNights = 7 }: Props) {
   const { selectedActivityIds, toggleActivity } = useSelectionStore();
   const [categoryFilter, setCategoryFilter] = useState("all");
 
-  // Limit logic: ~2 activities per day is comfortable, 3 is the absolute max
   const recommendedMin = Math.max(1, durationNights);
   const recommendedMax = Math.round(durationNights * 2);
   const hardMax = durationNights * 3;
@@ -113,11 +155,6 @@ export function ActivitiesSection({ result, durationNights = 7 }: Props) {
   const filtered = categoryFilter === "all"
     ? result.activities
     : result.activities.filter((a) => a.category === categoryFilter);
-
-  const dayOfActivity = (actId: string) => {
-    const day = result.schedule?.find((d) => d.slots.some((s) => s.activityId === actId));
-    return day ? `Day ${day.day}` : undefined;
-  };
 
   const totalSelected = result.activities
     .filter((a) => selectedActivityIds.includes(a.id))
@@ -142,6 +179,9 @@ export function ActivitiesSection({ result, durationNights = 7 }: Props) {
         </p>
       </div>
 
+      {/* Day distribution preview — always visible, updates live */}
+      <DayDistributionPreview selectedCount={selectedCount} durationNights={durationNights} />
+
       {/* Selection status bar */}
       {selectedCount > 0 && (
         <div className={cn(
@@ -153,11 +193,9 @@ export function ActivitiesSection({ result, durationNights = 7 }: Props) {
             : "bg-emerald-50 border border-emerald-200"
         )}>
           <div className="flex items-center gap-2">
-            {isAtMax ? (
-              <AlertTriangle className="w-4 h-4 text-red-500 shrink-0" />
-            ) : isOverRecommended ? (
-              <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0" />
-            ) : null}
+            {(isAtMax || isOverRecommended) && (
+              <AlertTriangle className={cn("w-4 h-4 shrink-0", isAtMax ? "text-red-500" : "text-amber-500")} />
+            )}
             <span className={cn(
               "font-medium",
               isAtMax ? "text-red-700" : isOverRecommended ? "text-amber-700" : "text-emerald-700"
@@ -204,7 +242,6 @@ export function ActivitiesSection({ result, durationNights = 7 }: Props) {
             activity={act}
             isSelected={selectedActivityIds.includes(act.id)}
             onToggle={toggleActivity}
-            dayLabel={dayOfActivity(act.id)}
             isAtMax={isAtMax}
           />
         ))}

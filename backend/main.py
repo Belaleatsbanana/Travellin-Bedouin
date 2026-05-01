@@ -5,8 +5,14 @@ Run:  uvicorn main:app --reload --port 8000
 """
 
 import os
+from pathlib import Path
 from dotenv import load_dotenv
-load_dotenv()
+
+# Support running from backend/ dir directly (local dev) or from project root (Docker).
+# Try backend/.env first, then project root .env.
+_here = Path(__file__).parent
+load_dotenv(_here / ".env")
+load_dotenv(_here.parent / ".env")
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware

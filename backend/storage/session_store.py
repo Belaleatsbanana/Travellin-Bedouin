@@ -33,6 +33,7 @@ class SessionState:
             p: PhaseState(p) for p in PIPELINE_PHASES
         }
         self.budget_result: dict | None = None
+        self.results: dict[str, Any] = {}
         self.confirmed_accommodation: dict | None = None
         self.confirmed_activities: dict | None = None
         self.confirmed_transport: dict | None = None
@@ -100,7 +101,9 @@ async def update_progress(
 
 async def store_result(session_id: str, phase_id: str, data: Any) -> None:
     state = get_session(session_id)
-    if not state or phase_id not in state.phases:
+    if not state:
         return
     async with state._lock:
-        state.phases[phase_id].result = data
+        state.results[phase_id] = data
+        if phase_id in state.phases:
+            state.phases[phase_id].result = data
