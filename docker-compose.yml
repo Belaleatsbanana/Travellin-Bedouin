@@ -6,8 +6,8 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
       args:
-        # Baked into the JS bundle — browser calls backend at localhost:8000
-        NEXT_PUBLIC_API_BASE_URL: http://localhost:8000
+        # Empty string = relative URLs (/api/...) — browser never needs the backend host
+        NEXT_PUBLIC_API_BASE_URL: ""
         NEXT_PUBLIC_MOCK_API: "false"
         NEXT_PUBLIC_USE_SSE: "false"
         NEXT_PUBLIC_POLL_INTERVAL_MS: "2000"
@@ -22,6 +22,8 @@ services:
       - "3000:3000"
     environment:
       NODE_ENV: production
+      # Internal container URL — used by Next.js server-side rewrites, never exposed to browser
+      BACKEND_URL: http://travellin-backend:8000
     depends_on:
       backend:
         condition: service_healthy
@@ -46,7 +48,8 @@ services:
     env_file: .env
     environment:
       GROQ_MODEL: llama-3.3-70b-versatile
-      CORS_ORIGINS: http://localhost:3000
+      # Frontend container is the only caller — its requests arrive from the Next.js server
+      CORS_ORIGINS: http://travellin-frontend:3000
       SESSION_TTL_SECONDS: "86400"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
