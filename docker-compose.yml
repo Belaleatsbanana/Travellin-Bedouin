@@ -25,7 +25,7 @@ services:
       # Internal container URL — used by Next.js server-side rewrites, never exposed to browser
       BACKEND_URL: http://travellin-backend:8000
     depends_on:
-      backend:
+      backend: 
         condition: service_healthy
     networks:
       - travellin-net
