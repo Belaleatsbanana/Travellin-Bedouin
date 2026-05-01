@@ -28,7 +28,7 @@ COPY . .
 
 # Build-time env vars (these are baked into the JS bundle by Next.js)
 # Override at build time: docker build --build-arg NEXT_PUBLIC_API_BASE_URL=https://api.example.com
-ARG NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
+ARG NEXT_PUBLIC_API_BASE_URL=
 ARG NEXT_PUBLIC_MOCK_API=false
 ARG NEXT_PUBLIC_USE_SSE=false
 ARG NEXT_PUBLIC_POLL_INTERVAL_MS=2000
