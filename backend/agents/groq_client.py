@@ -29,8 +29,7 @@ _FALLBACK_KEY_ENVS = [
 ]
 
 _FALLBACK_MODELS = [
-    "mixtral-8x7b-32768",
-    "llama-3.3-70b-versatile"
+    "mixtral-8x7b-32768"
 ]
 
 
