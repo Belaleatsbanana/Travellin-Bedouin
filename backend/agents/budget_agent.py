@@ -17,7 +17,7 @@ from agents.groq_client import groq_chat
 from storage.session_store import emit_thought, store_result, update_progress
 
 AGENT_ID = "budget"
-GROQ_MODEL = os.getenv("GROQ_MODEL", "mistral-saba-24b")
+GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
 
 # Default allocation percentages
 _DEFAULT_PCT = {

@@ -20,7 +20,7 @@ from storage.session_store import emit_thought, store_result, update_progress
 GOOGLE_MAPS_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY", "")
 
 AGENT_ID = "transportation"
-GROQ_MODEL = os.getenv("GROQ_MODEL", "mistral-saba-24b")
+GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
 
 
 async def _fetch_route_data(schedule: list[dict]) -> dict[str, dict]:

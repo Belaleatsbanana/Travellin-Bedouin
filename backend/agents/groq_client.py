@@ -29,7 +29,7 @@ _FALLBACK_KEY_ENVS = [
 ]
 
 _FALLBACK_MODELS = [
-    "mistral-saba-24b"
+    "llama-3.1-8b-instant",
 ]
 
 
