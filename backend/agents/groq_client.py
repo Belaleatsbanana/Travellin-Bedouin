@@ -28,9 +28,7 @@ _FALLBACK_KEY_ENVS = [
     "GROQ_API_KEY",
 ]
 
-_FALLBACK_MODELS = [
-    "llama-3.1-8b-instant",
-]
+_FALLBACK_MODELS: list[str] = []
 
 
 def _resolve_keys(primary_env: str) -> list[str]:
@@ -92,9 +90,8 @@ async def groq_chat(
                 return result
             except (groq_sdk.RateLimitError, groq_sdk.APIStatusError, groq_sdk.BadRequestError, groq_sdk.AuthenticationError) as exc:
                 is_retryable = (
-                    exc.status_code in (401, 429, 413) or
+                    exc.status_code in (401, 429) or
                     "rate_limit" in str(exc).lower() or
-                    "too large" in str(exc).lower() or
                     "decommissioned" in str(exc).lower() or
                     "invalid_api_key" in str(exc).lower()
                 )
