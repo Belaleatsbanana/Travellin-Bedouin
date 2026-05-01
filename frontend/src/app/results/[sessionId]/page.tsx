@@ -53,38 +53,7 @@ export default function ResultsPage() {
     if (isError && isNotFound) router.push("/plan");
   }, [isError, isNotFound, router]);
 
-  if (isLoading) {
-    return (
-      <>
-        <Navbar />
-        <main className="min-h-screen pt-16 flex items-center justify-center bg-brand-parchment">
-          <div className="text-center">
-            <Loader2 className="w-10 h-10 animate-spin text-brand-sand mx-auto mb-4" />
-            <p className="text-brand-night/50">Loading your trip plan...</p>
-          </div>
-        </main>
-      </>
-    );
-  }
-
-  if (isError && !isNotFound) {
-    return (
-      <>
-        <Navbar />
-        <main className="min-h-screen pt-16 flex items-center justify-center bg-brand-parchment">
-          <div className="text-center space-y-4">
-            <p className="text-red-500">Failed to load your trip plan.</p>
-            <button
-              onClick={() => router.push("/plan")}
-              className="px-6 py-2 rounded-lg bg-brand-sand text-brand-night font-medium hover:bg-brand-dune transition-colors"
-            >
-              Start a new plan
-            </button>
-          </div>
-        </main>
-      </>
-    );
-  }
+  // ── Derive data (safe when data is undefined during loading) ─────────────
 
   const budget = data?.budget;
   const formData = data?.formData as any;
@@ -119,6 +88,7 @@ export default function ResultsPage() {
     return budget?.transportTotal ?? 0;
   })();
 
+  // All useMemo hooks must be unconditional — no early returns before this point
   const selectedActivities = useMemo(
     () => (activities?.activities ?? []).filter((a) => selectedActivityIds.includes(a.id)),
     [activities, selectedActivityIds],
@@ -133,7 +103,6 @@ export default function ResultsPage() {
     const dayMeta = activities?.schedule ?? [];
     if (!dayMeta.length) return [];
 
-    // If no selections yet, fall back to the backend-generated schedule
     if (!selectedActivityIds.length) return dayMeta;
 
     const n = selectedActivities.length;
@@ -163,6 +132,41 @@ export default function ResultsPage() {
       return { day: day.day, date: day.date, slots, freeTime: day.freeTime };
     });
   }, [selectedActivityIds, selectedActivities, activities]);
+
+  // ── Early returns (after all hooks) ──────────────────────────────────────
+
+  if (isLoading) {
+    return (
+      <>
+        <Navbar />
+        <main className="min-h-screen pt-16 flex items-center justify-center bg-brand-parchment">
+          <div className="text-center">
+            <Loader2 className="w-10 h-10 animate-spin text-brand-sand mx-auto mb-4" />
+            <p className="text-brand-night/50">Loading your trip plan...</p>
+          </div>
+        </main>
+      </>
+    );
+  }
+
+  if (isError && !isNotFound) {
+    return (
+      <>
+        <Navbar />
+        <main className="min-h-screen pt-16 flex items-center justify-center bg-brand-parchment">
+          <div className="text-center space-y-4">
+            <p className="text-red-500">Failed to load your trip plan.</p>
+            <button
+              onClick={() => router.push("/plan")}
+              className="px-6 py-2 rounded-lg bg-brand-sand text-brand-night font-medium hover:bg-brand-dune transition-colors"
+            >
+              Start a new plan
+            </button>
+          </div>
+        </main>
+      </>
+    );
+  }
 
   const dailyLegs: DayLegs[] = transport?.dailyLegs || [];
 
