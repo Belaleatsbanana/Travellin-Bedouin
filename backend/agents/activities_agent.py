@@ -28,7 +28,7 @@ from storage.session_store import emit_thought, store_result, update_progress
 GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
 GOOGLE_MAPS_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY", "")
 AGENT_ID = "activities"
-MAX_TOKENS_FINAL = 16000
+MAX_TOKENS_FINAL = 8000
 
 # Maps user preference categories → Google Places API types
 _CATEGORY_PLACE_TYPES: dict[str, list[str]] = {
