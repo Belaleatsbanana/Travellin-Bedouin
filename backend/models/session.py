@@ -35,3 +35,17 @@ class TripFormData(BaseModel):
 
 class CreateSessionRequest(BaseModel):
     formData: TripFormData
+
+
+class ChatMessage(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str
+    timestamp: str
+
+
+class ChatRequest(BaseModel):
+    message: str
+
+
+class ConfirmRequest(BaseModel):
+    selectedOptionId: Optional[str] = None

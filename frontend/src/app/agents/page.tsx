@@ -1,23 +1,21 @@
-import { Navbar } from "@/components/layout/Navbar";
-import { AgentOrchestrator } from "@/components/agents/AgentOrchestrator";
+"use client";
 
-export default function AgentsPage() {
-  return (
-    <>
-      <Navbar />
-      <main className="min-h-screen pt-16 bg-brand-parchment px-4 py-12">
-        <div className="max-w-5xl mx-auto">
-          <div className="text-center mb-10">
-            <h1 className="text-3xl font-serif font-bold text-brand-night mb-2">
-              Your Agents Are Working
-            </h1>
-            <p className="text-brand-night/50">
-              Five specialists are researching your trip in parallel. Watch their progress below.
-            </p>
-          </div>
-          <AgentOrchestrator />
-        </div>
-      </main>
-    </>
-  );
+// This page is no longer used — the pipeline is now at /pipeline/[sessionId]
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { useTripStore } from "@/store/tripStore";
+
+export default function AgentsRedirectPage() {
+  const router = useRouter();
+  const { sessionId } = useTripStore();
+
+  useEffect(() => {
+    if (sessionId) {
+      router.replace(`/pipeline/${sessionId}`);
+    } else {
+      router.replace("/plan");
+    }
+  }, [sessionId, router]);
+
+  return null;
 }

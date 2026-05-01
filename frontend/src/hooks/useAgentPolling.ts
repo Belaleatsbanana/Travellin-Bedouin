@@ -41,12 +41,14 @@ export function useAgentPolling(sessionId: string | null) {
     }
   }, [query.data, updateAgentStatus, setOverallStatus]);
 
+  const errorStatus = (query.error as (Error & { status?: number }) | null)?.status;
+
   return {
-    // In mock mode read directly from the store; in real mode use query data.
     isComplete: MOCK
       ? overallStatus === "completed"
       : (query.data as SessionStatusResponse | undefined)?.overallStatus === "completed",
-    isError: !MOCK && query.isError,
+    isError: !MOCK && query.isError && errorStatus !== 404,
+    isSessionNotFound: !MOCK && errorStatus === 404,
     isLoading: !MOCK && query.isLoading,
   };
 }

@@ -9,9 +9,10 @@ import asyncio
 import json
 import os
 
-from groq import AsyncGroq
+import groq as groq_sdk
 
 from models.session import TripFormData
+from agents.groq_client import groq_chat
 from storage.session_store import emit_thought, store_result, update_progress
 
 AGENT_ID = "visa_insurance"
@@ -28,7 +29,6 @@ async def run_visa_agent(
     await emit_thought(session_id, AGENT_ID, "Fetching travel advisory level...", "search")
     await asyncio.sleep(0.5)
 
-    groq = AsyncGroq(api_key=os.getenv("GROQ_API_KEY", ""))
     prompt = (
         f"A {form_data.passportNationality} passport holder is traveling to "
         f"{form_data.destinationCity}, {form_data.destinationCountry} "
@@ -46,7 +46,8 @@ async def run_visa_agent(
     result: dict = {}
     try:
         await update_progress(session_id, AGENT_ID, 50)
-        resp = await groq.chat.completions.create(
+        resp = await groq_chat(
+            primary_key_env="VISA_API_KEY",
             model=GROQ_MODEL,
             messages=[{"role": "user", "content": prompt}],
             max_tokens=1500,
@@ -54,6 +55,8 @@ async def run_visa_agent(
             response_format={"type": "json_object"},
         )
         result = json.loads(resp.choices[0].message.content or "{}")
+    except groq_sdk.RateLimitError as exc:
+        print(f"[Visa Agent] RATE LIMIT: {exc}", flush=True)
     except Exception as exc:
         await emit_thought(session_id, AGENT_ID, f"LLM error: {exc}", "warning")
 

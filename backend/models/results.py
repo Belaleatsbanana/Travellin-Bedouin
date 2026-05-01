@@ -28,45 +28,6 @@ class BudgetResult(BaseModel):
     percentages: BudgetPercentages
 
 
-# ─── Visa & Insurance ─────────────────────────────────────────────────────────
-
-class VisaRequirement(BaseModel):
-    required: bool
-    visaType: str
-    processingDays: int
-    cost: float
-    currency: str
-    applicationUrl: str
-    notes: list[str]
-    documentsRequired: list[str]
-
-
-class TravelAdvisory(BaseModel):
-    level: Literal["safe", "caution", "warning", "restricted"]
-    message: str
-
-
-class InsurancePackage(BaseModel):
-    id: str
-    provider: str
-    planName: str
-    coverageType: Literal["basic", "standard", "premium"]
-    pricePerPerson: float
-    totalPrice: float
-    currency: str
-    coverageHighlights: list[str]
-    medicalCoverage: float
-    cancellationCoverage: float
-    recommended: bool
-
-
-class VisaResult(BaseModel):
-    visaRequirement: VisaRequirement
-    travelAdvisory: TravelAdvisory
-    entryRequirements: list[str]
-    insurancePackages: list[InsurancePackage]
-
-
 # ─── Accommodation ────────────────────────────────────────────────────────────
 
 class Coordinates(BaseModel):
@@ -90,7 +51,7 @@ class AccommodationOption(BaseModel):
     currency: str
     location: AccommodationLocation
     amenities: list[str]
-    images: list[str]
+    images: Optional[list[str]] = None
     bookingUrl: str
     rating: float
     reviewCount: int
@@ -102,6 +63,54 @@ class AccommodationResult(BaseModel):
     currency: str
     recommendation: str
     options: list[AccommodationOption]
+
+
+# ─── Activities ───────────────────────────────────────────────────────────────
+
+class Activity(BaseModel):
+    id: str
+    name: str
+    category: str
+    description: str
+    duration: Literal["half_day", "full_day", "evening", "multi_day"]
+    price: float
+    priceType: Literal["per_person", "per_group"]
+    currency: str
+    location: str
+    rating: float
+    reviewCount: int
+    included: list[str]
+    meetingPoint: Optional[str] = ""
+    bookingUrl: Optional[str] = ""
+    images: Optional[list[str]] = None
+    recommended: bool
+    dayRecommended: Optional[int] = None
+    coordinates: Optional[Coordinates] = None
+
+
+class ScheduledSlot(BaseModel):
+    startTime: str        # "HH:MM"
+    endTime: str          # "HH:MM"
+    type: Literal["activity"] = "activity"
+    activityId: str
+    activityName: str
+    locationName: str
+    coordinates: Optional[Coordinates] = None
+
+
+class DaySchedule(BaseModel):
+    day: int
+    date: str             # "YYYY-MM-DD"
+    slots: list[ScheduledSlot]
+    freeTime: str
+
+
+class ActivitiesResult(BaseModel):
+    budgetAllocated: float
+    currency: str
+    recommendation: str
+    activities: list[Activity]
+    schedule: list[DaySchedule]
 
 
 # ─── Transport ────────────────────────────────────────────────────────────────
@@ -129,57 +138,46 @@ class TransportOptions(BaseModel):
     minibus: list[TransportOption] = []
 
 
+class TransportLeg(BaseModel):
+    fromTime: str
+    toTime: str
+    fromLocationName: str
+    toLocationName: str
+    mode: Literal["uber", "taxi", "metro", "walk", "rental_car", "bus", "dedicated_driver"]
+    durationMinutes: int
+    estimatedCost: float
+    currency: str
+    notes: str = ""
+
+
+class DayLegs(BaseModel):
+    day: int
+    date: str
+    legs: list[TransportLeg]
+
+
 class TransportResult(BaseModel):
     budgetAllocated: float
     currency: str
     recommendation: str
     options: TransportOptions
+    dailyLegs: list[DayLegs] = []
 
 
-# ─── Activities ───────────────────────────────────────────────────────────────
+# ─── Full pipeline result ─────────────────────────────────────────────────────
 
-class Activity(BaseModel):
-    id: str
-    name: str
-    category: str
-    description: str
-    duration: Literal["half_day", "full_day", "evening", "multi_day"]
-    price: float
-    priceType: Literal["per_person", "per_group"]
+class ConfirmedBudget(BaseModel):
+    totalBudget: float
     currency: str
-    location: str
-    rating: float
-    reviewCount: int
-    included: list[str]
-    meetingPoint: Optional[str] = ""
-    bookingUrl: Optional[str] = ""
-    images: list[str]
-    recommended: bool
-    dayRecommended: Optional[int] = None
+    accommodationTotal: float
+    activitiesTotal: float
+    transportTotal: float
 
 
-class ItineraryDay(BaseModel):
-    day: int
-    date: str
-    activities: list[str]
-    freeTime: str
-
-
-class ActivitiesResult(BaseModel):
-    budgetAllocated: float
-    currency: str
-    recommendation: str
-    activities: list[Activity]
-    suggestedItinerary: list[ItineraryDay]
-
-
-# ─── Full Result ──────────────────────────────────────────────────────────────
-
-class FullResult(BaseModel):
+class FullPipelineResult(BaseModel):
     sessionId: str
     formData: dict
-    budget: Optional[BudgetResult] = None
-    visa: Optional[VisaResult] = None
-    accommodation: Optional[AccommodationResult] = None
-    transport: Optional[TransportResult] = None
-    activities: Optional[ActivitiesResult] = None
+    budget: Optional[ConfirmedBudget] = None
+    accommodation: Optional[dict] = None
+    activities: Optional[dict] = None
+    transport: Optional[dict] = None

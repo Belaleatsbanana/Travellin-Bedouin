@@ -1,35 +1,47 @@
 from __future__ import annotations
 import asyncio
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 
-from models.agents import AgentState, AgentThought
-from models.session import TripFormData
+from models.agents import AgentThought
+from models.session import ChatMessage, TripFormData
 
-AGENT_IDS = ["budget", "visa_insurance", "accommodation", "transportation", "activities"]
+PIPELINE_PHASES = ["accommodation", "activities", "transportation"]
+
+PhaseStatus = Literal["pending", "running", "completed", "confirmed", "failed"]
+
+
+class PhaseState:
+    def __init__(self, phase_id: str) -> None:
+        self.phase_id = phase_id
+        self.status: PhaseStatus = "pending"
+        self.progress: int = 0
+        self.thoughts: list[AgentThought] = []
+        self.result: dict | None = None
+        self.chat_history: list[ChatMessage] = []
+        self.startedAt: str | None = None
+        self.completedAt: str | None = None
 
 
 class SessionState:
     def __init__(self, session_id: str, form_data: TripFormData) -> None:
         self.session_id = session_id
         self.form_data = form_data
-        self.agents: dict[str, AgentState] = {
-            aid: AgentState(agentId=aid, status="pending", progress=0, thoughts=[])
-            for aid in AGENT_IDS
+        self.overall_status: str = "initializing"
+        self.current_phase: str = "accommodation"
+        self.phases: dict[str, PhaseState] = {
+            p: PhaseState(p) for p in PIPELINE_PHASES
         }
-        self.overall_status: str = "running"
+        self.budget_result: dict | None = None
         self.results: dict[str, Any] = {}
+        self.confirmed_accommodation: dict | None = None
+        self.confirmed_activities: dict | None = None
+        self.confirmed_transport: dict | None = None
         self.created_at: datetime = datetime.utcnow()
         self._lock = asyncio.Lock()
 
-    def all_completed(self) -> bool:
-        return all(a.status == "completed" for a in self.agents.values())
 
-    def any_failed(self) -> bool:
-        return any(a.status == "failed" for a in self.agents.values())
-
-
-# In-memory store — replace with Redis for production
+# In-memory store
 _sessions: dict[str, SessionState] = {}
 
 
@@ -47,16 +59,16 @@ def delete_session(session_id: str) -> None:
     _sessions.pop(session_id, None)
 
 
-# ─── Helper coroutines used by agents ────────────────────────────────────────
+# ─── Phase helpers ────────────────────────────────────────────────────────────
 
 async def emit_thought(
     session_id: str,
-    agent_id: str,
+    phase_id: str,
     message: str,
     thought_type: str = "info",
 ) -> None:
     state = get_session(session_id)
-    if not state:
+    if not state or phase_id not in state.phases:
         return
     thought = AgentThought(
         timestamp=datetime.utcnow().isoformat() + "Z",
@@ -64,36 +76,34 @@ async def emit_thought(
         type=thought_type,  # type: ignore[arg-type]
     )
     async with state._lock:
-        state.agents[agent_id].thoughts.append(thought)
+        state.phases[phase_id].thoughts.append(thought)
 
 
 async def update_progress(
     session_id: str,
-    agent_id: str,
+    phase_id: str,
     progress: int,
     status: Optional[str] = None,
 ) -> None:
     state = get_session(session_id)
-    if not state:
+    if not state or phase_id not in state.phases:
         return
     async with state._lock:
-        agent = state.agents[agent_id]
-        agent.progress = max(agent.progress, progress)
+        phase = state.phases[phase_id]
+        phase.progress = max(phase.progress, progress)
         if status:
-            agent.status = status  # type: ignore[assignment]
-            if status == "running" and agent.startedAt is None:
-                agent.startedAt = datetime.utcnow().isoformat() + "Z"
+            phase.status = status  # type: ignore[assignment]
+            if status == "running" and phase.startedAt is None:
+                phase.startedAt = datetime.utcnow().isoformat() + "Z"
             elif status in ("completed", "failed"):
-                agent.completedAt = datetime.utcnow().isoformat() + "Z"
+                phase.completedAt = datetime.utcnow().isoformat() + "Z"
 
 
-async def store_result(session_id: str, key: str, data: Any) -> None:
+async def store_result(session_id: str, phase_id: str, data: Any) -> None:
     state = get_session(session_id)
     if not state:
         return
     async with state._lock:
-        state.results[key] = data
-        if state.all_completed():
-            state.overall_status = "completed"
-        elif state.any_failed():
-            state.overall_status = "failed"
+        state.results[phase_id] = data
+        if phase_id in state.phases:
+            state.phases[phase_id].result = data
