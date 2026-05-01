@@ -12,7 +12,9 @@ WORKDIR /app
 COPY .npmrc* package.json package-lock.json* ./
 # npm ci requires a lockfile; npm install generates one if missing.
 # Once a package-lock.json is committed, switch back to: npm ci --ignore-scripts
-RUN npm install --ignore-scripts
+# Cache mount avoids re-downloading packages on every build (esp. under QEMU)
+RUN --mount=type=cache,id=npm-$TARGETARCH,target=/root/.npm \
+    npm install --ignore-scripts
 
 # ─────────────────────────────────────────────
 # Stage 2 — Build the Next.js application
