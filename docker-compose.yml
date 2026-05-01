@@ -47,7 +47,7 @@ services:
       - "8000:8000"
     env_file: .env
     environment:
-      GROQ_MODEL: llama-3.3-70b-versatile
+      GROQ_MODEL: mistral-saba-24b
       # Frontend container is the only caller — its requests arrive from the Next.js server
       CORS_ORIGINS: http://travellin-frontend:3000
       SESSION_TTL_SECONDS: "86400"

@@ -29,7 +29,7 @@ _FALLBACK_KEY_ENVS = [
 ]
 
 _FALLBACK_MODELS = [
-    "mixtral-8x7b-32768"
+    "mistral-saba-24b"
 ]
 
 

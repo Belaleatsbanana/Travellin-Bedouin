@@ -547,7 +547,7 @@ async def run_downstream_agents(session_id: str, budget: BudgetAllocation):
 
 ```bash
 GROQ_API_KEY=...                  # Already set
-GROQ_MODEL=llama3-70b-8192        # Recommended model
+GROQ_MODEL=mistral-saba-24b        # Recommended model
 SESSION_TTL_SECONDS=86400         # 24 hours
 CORS_ORIGINS=http://localhost:3000
 ```

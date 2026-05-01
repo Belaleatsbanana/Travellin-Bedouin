@@ -25,7 +25,7 @@ from storage.session_store import emit_thought, store_result, update_progress
 
 # ─── Configuration ────────────────────────────────────────────────────────────
 
-GROQ_MODEL = os.getenv("GROQ_MODEL", "mixtral-8x7b-32768")
+GROQ_MODEL = os.getenv("GROQ_MODEL", "mistral-saba-24b")
 GOOGLE_MAPS_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY", "")
 AGENT_ID = "activities"
 MAX_TOKENS_FINAL = 16000

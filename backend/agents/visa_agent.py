@@ -16,7 +16,7 @@ from agents.groq_client import groq_chat
 from storage.session_store import emit_thought, store_result, update_progress
 
 AGENT_ID = "visa_insurance"
-GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+GROQ_MODEL = os.getenv("GROQ_MODEL", "mistral-saba-24b")
 
 
 async def run_visa_agent(

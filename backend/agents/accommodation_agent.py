@@ -36,7 +36,7 @@ from storage.session_store import emit_thought, store_result, update_progress
 # ─── Configuration ────────────────────────────────────────────────────────────
 
 AGENT_ID = "accommodation"
-GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+GROQ_MODEL = os.getenv("GROQ_MODEL", "mistral-saba-24b")
 GOOGLE_MAPS_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY", "")
 
 # Real Unsplash photo IDs per accommodation type — used when Google Maps photos unavailable

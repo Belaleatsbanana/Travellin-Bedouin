@@ -11,7 +11,7 @@ Responsibilities:
   5. Emit 7-10 thoughts with monotonically-increasing progress.
   6. Store BudgetResult on the session and signal downstream agents.
 
-The agent uses the GROQ LLM (llama3-70b-8192) to reason about the city's
+The agent uses the GROQ LLM (mistral-saba-24b) to reason about the city's
 cost-of-living and produce the final percentages, so results are city-aware
 rather than hard-coded.  A deterministic fallback is applied when the LLM
 is unreachable so tests can run offline.
@@ -48,7 +48,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
-GROQ_MODEL   = os.getenv("GROQ_MODEL", "llama3-70b-8192")
+GROQ_MODEL   = os.getenv("GROQ_MODEL", "mistral-saba-24b")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 
 # Default allocation percentages (mid-range city baseline)
