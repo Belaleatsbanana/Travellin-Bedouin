@@ -16,9 +16,11 @@ import { DayTimeline } from "@/components/results/DayTimeline";
 import { useSelectionStore } from "@/store/selectionStore";
 import { Loader2, Building2, Car, Wallet } from "lucide-react";
 import { cn, formatCurrency } from "@/lib/utils";
+import { VisaSection } from "@/components/results/visa/VisaSection";
 import type { DaySchedule, ScheduledSlot, ActivitiesAgentResult } from "@/types/activities";
 import type { TransportAgentResult, DayLegs } from "@/types/transport";
 import type { AccommodationAgentResult } from "@/types/accommodation";
+import type { VisaAgentResult } from "@/types/visa";
 
 // Time slots to assign when rebuilding schedule from selections
 const DAY_SLOTS: [string, string][] = [
@@ -60,6 +62,7 @@ export default function ResultsPage() {
   const accommodation = data?.accommodation as AccommodationAgentResult | undefined;
   const activities = data?.activities as ActivitiesAgentResult | undefined;
   const transport = data?.transport as TransportAgentResult | undefined;
+  const visa = data?.visa as VisaAgentResult | undefined;
 
   const confirmedOption =
     accommodation?.options?.find((o) => o.id === selectedAccommodationId) ||
@@ -318,6 +321,9 @@ export default function ResultsPage() {
               </div>
             </div>
           </div>
+
+          {/* Visa & Insurance — rendered after daily timeline */}
+          {visa && <VisaSection result={visa} />}
         </div>
       </main>
       <Footer />

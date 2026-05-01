@@ -1,8 +1,8 @@
 """
 Orchestrator
 ============
-Sequential pipeline: budget (hidden) → accommodation → activities → transportation.
-Each phase pauses for user confirmation before the next begins.
+Sequential pipeline: budget (hidden) → accommodation → activities → transportation → visa (hidden, final).
+Each interactive phase pauses for user confirmation before the next begins.
 Chat refinement regenerates the current phase with updated conversation history.
 """
 
@@ -16,6 +16,7 @@ from agents.budget_agent import run_budget_agent
 from agents.accommodation_agent import run_accommodation_agent
 from agents.activities_agent import run_activities_agent
 from agents.transport_agent import run_transport_agent
+from agents.visa_agent import run_visa_agent
 
 log = logging.getLogger(__name__)
 
@@ -85,8 +86,9 @@ async def confirm_phase(session_id: str, phase: str, selected_option_id: str | N
     elif phase == "transportation":
         state.confirmed_transport = result
         phase_state.status = "confirmed"
-        state.current_phase = "done"
-        state.overall_status = "done"
+        state.current_phase = "visa"
+        state.overall_status = "running"
+        await _run_visa(session_id)
         return "done"
 
     return None
@@ -176,3 +178,19 @@ async def _run_transportation(session_id: str, chat_history: list[dict]) -> None
         log.exception("Transport agent failed: %s", exc)
         state.phases["transportation"].status = "failed"
         state.overall_status = "failed"
+
+
+async def _run_visa(session_id: str) -> None:
+    state = store.get_session(session_id)
+    if not state:
+        return
+    budget = _budget_for(state, "visa_insurance", state.form_data.totalBudget * 0.05)
+    try:
+        await run_visa_agent(session_id, state.form_data, budget)
+    except Exception as exc:
+        log.exception("Visa agent failed: %s", exc)
+    finally:
+        state = store.get_session(session_id)
+        if state:
+            state.current_phase = "done"
+            state.overall_status = "done"
