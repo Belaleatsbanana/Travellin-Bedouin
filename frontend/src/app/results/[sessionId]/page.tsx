@@ -12,7 +12,6 @@ const BudgetBreakdownChart = dynamic(
   () => import("@/components/results/BudgetBreakdownChart").then((m) => m.BudgetBreakdownChart),
   { ssr: false }
 );
-import { AccommodationSection } from "@/components/results/accommodation/AccommodationSection";
 import { DayTimeline } from "@/components/results/DayTimeline";
 import { useSelectionStore } from "@/store/selectionStore";
 import { Loader2, Building2, Car, Wallet } from "lucide-react";
@@ -44,11 +43,9 @@ export default function ResultsPage() {
     retry: false,
   });
 
-  const {
-    selectedAccommodationId,
-    selectedTransportIds,
-    selectedActivityIds,
-  } = useSelectionStore();
+  const selectedAccommodationId = useSelectionStore((s) => s.selectedAccommodationId);
+  const selectedTransportIds    = useSelectionStore((s) => s.selectedTransportIds);
+  const selectedActivityIds     = useSelectionStore((s) => s.selectedActivityIds);
 
   const isNotFound = (error as (Error & { status?: number }) | null)?.status === 404;
 
