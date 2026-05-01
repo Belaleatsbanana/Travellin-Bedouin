@@ -6,8 +6,12 @@ import { useQuery } from "@tanstack/react-query";
 import { fetchFullResults } from "@/lib/api/trip";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
+import dynamic from "next/dynamic";
 import { TripSummaryHeader } from "@/components/results/TripSummaryHeader";
-import { BudgetBreakdownChart } from "@/components/results/BudgetBreakdownChart";
+const BudgetBreakdownChart = dynamic(
+  () => import("@/components/results/BudgetBreakdownChart").then((m) => m.BudgetBreakdownChart),
+  { ssr: false }
+);
 import { AccommodationSection } from "@/components/results/accommodation/AccommodationSection";
 import { DayTimeline } from "@/components/results/DayTimeline";
 import { useSelectionStore } from "@/store/selectionStore";
