@@ -333,11 +333,27 @@ async def _run(
             f"\nCONVERSATION HISTORY — apply user preferences strictly:\n{conv}\n"
         )
 
-    # Places data section
+    # Places data section — trim to stay well under token limits
     if places_data:
+        # Keep only fields the LLM needs; drop verbose arrays
+        slim_fields = {"name", "address", "rating", "primary_type", "category", "coordinates"}
+        seen_names: set[str] = set()
+        slim_places: list[dict] = []
+        # Sort by rating desc so we keep the best places when capping per category
+        by_category: dict[str, list[dict]] = {}
+        for p in sorted(places_data, key=lambda x: x.get("rating", 0), reverse=True):
+            cat = p.get("category", "other")
+            by_category.setdefault(cat, []).append(p)
+        for cat_places in by_category.values():
+            for p in cat_places[:5]:  # max 5 places per category
+                name = p.get("name", "")
+                if name in seen_names:
+                    continue
+                seen_names.add(name)
+                slim_places.append({k: v for k, v in p.items() if k in slim_fields})
         places_section = (
             f"PLACES FROM GOOGLE MAPS (use these as primary source):\n"
-            + json.dumps(places_data, indent=2)
+            + json.dumps(slim_places)
             + "\n\n"
         )
     else:
